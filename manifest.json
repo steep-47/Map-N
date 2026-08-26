@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.1.0",
-  "description": "认知舆图：持久学习地点、实时定位，并保守识别当前可见人物与身份升级",
+  "version": "1.1.1",
+  "description": "认知舆图：持久学习地点、实时定位，并基于语义角色保守识别当前可见人物",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
