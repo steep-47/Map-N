@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.2.3",
-  "description": "认知舆图：紧凑移动端布局、下移地图面板、右侧低位工具栏，并修复魔法棒菜单入口稳定性",
+  "version": "1.2.4",
+  "description": "认知舆图：恢复稳定菜单入口，采用安全的移动端下移定位与低位右侧工具栏",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
