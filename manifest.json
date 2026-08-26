@@ -1,0 +1,12 @@
+{
+  "display_name": "Map-N 认知舆图",
+  "loading_order": 20,
+  "requires": [],
+  "optional": [],
+  "js": "Map-N.js",
+  "css": "Map-N.css",
+  "author": "Map-N",
+  "version": "1.0.1",
+  "homePage": "https://github.com/steep-47/Map-N",
+  "auto_update": true
+}
