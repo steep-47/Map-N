@@ -1,45 +1,399 @@
-// Map-N.js - 认知层级舆图 v1.0.1
-(function(){
+// Map-N.js - 认知层级舆图 v1.0.6
+(function () {
 'use strict';
-const VERSION='1.0.1',ROOT='世界舆图',BASE='mapN_memory_v101';
-if(window.MapNInstance){console.log('[Map-N] 已加载，跳过重复初始化。');return;}
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const uniq=a=>[...new Set((a||[]).filter(Boolean))];
-const esc=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-function ctxSafe(){try{return window.SillyTavern?.getContext?.()||(typeof getContext==='function'?getContext():null)}catch(e){console.warn('[Map-N] context 获取失败',e);return null}}
-function flatten(v,out=[]){if(!v)return out;if(Array.isArray(v)){v.forEach(x=>flatten(x,out));return out}if(typeof v!=='object')return out;if(Array.isArray(v.key)||Array.isArray(v.keys)||Object.prototype.hasOwnProperty.call(v,'content')){out.push(v);return out}Object.values(v).forEach(x=>flatten(x,out));return out}
-class MapN{
-constructor(){this.ctx=null;this.root={id:ROOT,children:[],parent:null};this.nodeMap={};this.alias=new Map();this.entries=[];this.path=[ROOT];this.discovered=new Set([ROOT]);this.encountered=new Set();this.currentPos=null;this.currentChars=[];this.container=null;this.memoryKey=BASE;this.bound=false;this.lastSig=''}
-async init(){for(let i=0;i<30&&!this.ctx;i++){this.ctx=ctxSafe();if(!this.ctx)await sleep(500)}if(!this.ctx){console.error('[Map-N] SillyTavern context 不可用');return}this.memoryKey=this.scopeKey();this.load();this.ui();this.bindUI();this.hooks();await this.prime();this.scanChat();this.render();console.log(`[Map-N] v${VERSION} 初始化完成。`)}
-scopeKey(){const id=this.ctx?.getCurrentChatId?.()||this.ctx?.chatId||`char-${this.ctx?.characterId??'unknown'}`;return `${BASE}:${id}`}
-save(){try{localStorage.setItem(this.memoryKey,JSON.stringify({discovered:[...this.discovered],encountered:[...this.encountered],currentPos:this.currentPos,currentChars:this.currentChars,path:this.path}))}catch(e){console.warn('[Map-N] 保存失败',e)}}
-load(){try{const d=JSON.parse(localStorage.getItem(this.memoryKey)||'null');if(!d)return;this.discovered=new Set(d.discovered||[ROOT]);this.discovered.add(ROOT);this.encountered=new Set(d.encountered||[]);this.currentPos=d.currentPos||null;this.currentChars=d.currentChars||[];this.path=d.path?.length?d.path:[ROOT]}catch(e){console.warn('[Map-N] 读取记忆失败',e)}}
-ui(){document.querySelector('#mapN-container')?.remove();document.querySelector('#mapN-float-btn')?.remove();const c=document.createElement('div');c.id='mapN-container';c.innerHTML=`<div class="mapN-header"><h2>✦ <span>Map-N</span> 认知舆图</h2><div class="mapN-tools"><button id="mapN-refresh" title="重新读取当前世界书">↻</button><button id="mapN-zoomIn">＋</button><button id="mapN-zoomOut">－</button><button id="mapN-home">⟲</button><button id="mapN-close-btn">✕</button></div></div><div class="mapN-breadcrumb" id="mapN-breadcrumb"></div><div class="mapN-status" id="mapN-status"></div><div class="mapN-grid" id="mapN-grid"></div><div class="mapN-bottom" id="mapN-bottom"></div><div class="mapN-pos" id="mapN-pos"></div><div class="mapN-characters" id="mapN-characters"></div>`;document.body.appendChild(c);this.container=c;const b=document.createElement('button');b.id='mapN-float-btn';b.type='button';b.textContent='🗺️';b.title='Map-N 认知舆图 (Alt+M)';document.body.appendChild(b);b.onclick=()=>this.toggle();c.querySelector('#mapN-close-btn').onclick=()=>this.close();c.querySelector('#mapN-home').onclick=()=>{this.path=[ROOT];this.render()};c.querySelector('#mapN-zoomOut').onclick=()=>{if(this.path.length>1)this.path.pop();this.render()};c.querySelector('#mapN-zoomIn').onclick=()=>{const x=this.children()[0];if(x)this.jump(x)};c.querySelector('#mapN-refresh').onclick=async()=>{await this.prime(true);this.render()}}
-bindUI(){document.addEventListener('keydown',e=>{if(e.altKey&&String(e.key).toLowerCase()==='m'){e.preventDefault();this.toggle()}});const g=document.querySelector('#mapN-grid');let down=false,x=0,y=0,l=0,t=0;g.addEventListener('pointerdown',e=>{down=true;x=e.clientX;y=e.clientY;l=g.scrollLeft;t=g.scrollTop;g.classList.add('dragging');g.setPointerCapture?.(e.pointerId)});g.addEventListener('pointermove',e=>{if(down){g.scrollLeft=l-(e.clientX-x);g.scrollTop=t-(e.clientY-y)}});['pointerup','pointercancel'].forEach(k=>g.addEventListener(k,()=>{down=false;g.classList.remove('dragging')}))}
-hooks(){if(this.bound)return;const es=this.ctx.eventSource,et=this.ctx.eventTypes||this.ctx.event_types;if(!es||!et){this.status('事件系统不可用',true);return}const byIndex=i=>{const m=this.ctx.chat?.[Number(i)];if(m?.mes)this.process(m.mes,!!m.is_user)};['MESSAGE_RECEIVED','MESSAGE_SENT','MESSAGE_SWIPED','MESSAGE_UPDATED'].forEach(k=>{if(et[k])es.on(et[k],byIndex)});if(et.WORLDINFO_ENTRIES_LOADED)es.on(et.WORLDINFO_ENTRIES_LOADED,d=>{this.consumeWorld(d);this.render()});const reset=()=>{this.memoryKey=this.scopeKey();this.path=[ROOT];this.discovered=new Set([ROOT]);this.encountered=new Set();this.currentPos=null;this.currentChars=[];this.load();this.prime(true).then(()=>{this.scanChat();this.render()})};['CHAT_CHANGED','CHARACTER_SELECTED'].forEach(k=>{if(et[k])es.on(et[k],reset)});this.bound=true}
-async prime(force=false){try{const names=this.ctx.getWorldInfoNames?.()||[];if(!names.length){this.status('等待世界书加载；发送一轮消息后会自动读取。');return}const all=[];for(const n of names){try{const d=await this.ctx.loadWorldInfo?.(n);if(d)all.push(d)}catch(e){console.warn('[Map-N] 世界书读取失败',n,e)}}if(all.length)this.consumeWorld(all);else if(force)this.status('没有读取到世界书条目。',true)}catch(e){this.status('读取世界书失败',true);console.error(e)}}
-consumeWorld(data){const entries=flatten(data);if(!entries.length)return;const sig=entries.map(e=>`${e.uid??''}:${(e.key||e.keys||[]).join('|')}:${e.content||''}`).join('\n');if(sig===this.lastSig)return;this.lastSig=sig;this.entries=entries;this.build(entries);this.status(`已读取 ${entries.length} 条世界书条目；地图节点 ${Object.keys(this.nodeMap).length} 个。`)}
-entryKeys(e){return uniq([...(Array.isArray(e.key)?e.key:[]),...(Array.isArray(e.keys)?e.keys:[])]).map(x=>String(x).trim()).filter(x=>x.length>=2)}
-classify(content){const c=String(content||'');const char=/年龄|性别|外貌|性格|口头禅|人物设定|角色设定|NPC|姓名[:：]|身份[:：]/.test(c);return char?'character':'location'}
-build(entries){const old=new Set(this.discovered),nodes={},alias=new Map();for(const e of entries){const keys=this.entryKeys(e);if(!keys.length)continue;const id=keys[0],content=String(e.content||'');const type=this.classify(content);if(!nodes[id])nodes[id]={id,aliases:keys,content,type,children:[],parent:null,isWater:/海|河|湖|江|溪|潭|水域|水库/.test(content),isMountain:/山|峰|岭|山脉|丘陵/.test(content)};keys.forEach(k=>{if(!alias.has(k))alias.set(k,id)})}const loc=Object.values(nodes).filter(n=>n.type==='location');for(const n of loc){let best=null;for(const p of loc){if(n===p)continue;const names=p.aliases.sort((a,b)=>b.length-a.length);for(const name of names){const re=new RegExp(`(?:位于|地处|隶属于|属于|坐落于|处于|在)\\s*[^。；;，,]{0,24}${esc(name)}(?:境内|地区|区域|之中|内|中)?`);if(re.test(n.content)){if(!best||name.length>best.name.length)best={id:p.id,name};break}}}if(best){n.parent=best.id;nodes[best.id].children.push(n.id)}}this.root={id:ROOT,children:[],parent:null};for(const n of loc){if(!n.parent){n.parent=ROOT;this.root.children.push(n.id)}n.children=uniq(n.children).sort((a,b)=>a.localeCompare(b,'zh-CN'))}this.root.children=uniq(this.root.children).sort((a,b)=>a.localeCompare(b,'zh-CN'));this.nodeMap=nodes;this.alias=alias;this.discovered=new Set([ROOT,...[...old].filter(x=>nodes[x])]);if(this.currentPos&&!nodes[this.currentPos])this.currentPos=null;if(!this.validPath(this.path))this.path=[ROOT]}
-validPath(p){if(!Array.isArray(p)||p[0]!==ROOT)return false;return p.slice(1).every(x=>this.nodeMap[x]?.type==='location')}
-resolveMentions(text,type){const hits=[];for(const [a,id] of [...this.alias.entries()].sort((x,y)=>y[0].length-x[0].length)){if(text.includes(a)&&this.nodeMap[id]?.type===type&&!hits.includes(id))hits.push(id)}return hits}
-discover(id){const n=this.nodeMap[id];if(!n)return;this.discovered.add(id);let p=n.parent;const seen=new Set();while(p&&p!==ROOT&&!seen.has(p)){seen.add(p);this.discovered.add(p);p=this.nodeMap[p]?.parent}this.discovered.add(ROOT)}
-locationFromText(text){const mentions=this.resolveMentions(text,'location');for(const id of mentions){const aliases=this.nodeMap[id].aliases.sort((a,b)=>b.length-a.length);for(const a of aliases){const q=esc(a);const patterns=[new RegExp(`(?:来到|抵达|到达|进入|走进|赶到|回到|返回|身处|现处|目前在|如今在|此刻在|位于|停留在|住在)\\s*[^。！？!?，,]{0,12}${q}`),new RegExp(`${q}[^。！？!?，,]{0,8}(?:到了|已到|落脚|驻扎|停留|住下)`)];if(patterns.some(r=>r.test(text)))return id}}return null}
-process(text,isUser=false){if(!text||!Object.keys(this.nodeMap).length)return;const locs=this.resolveMentions(text,'location'),chars=this.resolveMentions(text,'character');locs.forEach(x=>this.discover(x));chars.forEach(x=>{this.encountered.add(x)});this.currentChars=chars;if(!isUser){const pos=this.locationFromText(text);if(pos){this.discover(pos);this.currentPos=pos;this.path=this.pathTo(pos)}}this.save();if(this.container?.classList.contains('open'))this.render()}
-scanChat(){const chat=this.ctx.chat||[];for(const m of chat){if(m?.mes)this.process(String(m.mes),!!m.is_user)}}
-pathTo(id){const p=[],seen=new Set();let x=id;while(x&&x!==ROOT&&!seen.has(x)){seen.add(x);p.unshift(x);x=this.nodeMap[x]?.parent}p.unshift(ROOT);return p}
-children(){const id=this.path.at(-1);const all=id===ROOT?this.root.children:(this.nodeMap[id]?.children||[]);return all.filter(x=>this.discovered.has(x))}
-jump(id){if(id===ROOT)this.path=[ROOT];else if(this.discovered.has(id)&&this.nodeMap[id]?.type==='location')this.path=this.pathTo(id);this.render()}
-symbol(id){const n=this.nodeMap[id];return n?.isWater?'~':n?.isMountain?'▲':'◆'}
-render(){if(!this.container)return;const id=this.path.at(-1),kids=this.children();this.breadcrumb();this.grid(id,kids);this.bottom(kids);const p=document.querySelector('#mapN-pos');p.replaceChildren(document.createTextNode('📍 当前位置：'));const h=document.createElement('span');h.className='hl';h.textContent=this.currentPos?`◉ ${this.currentPos}`:'未定位';p.appendChild(h);const c=document.querySelector('#mapN-characters');c.replaceChildren();if(this.currentChars.length){c.style.display='block';const l=document.createElement('span');l.className='label';l.textContent='👤 本轮人物：';c.appendChild(l);this.currentChars.forEach(n=>{const s=document.createElement('span');s.className='name';s.textContent=n;c.appendChild(s)})}else c.style.display='none';this.save()}
-breadcrumb(){const b=document.querySelector('#mapN-breadcrumb');b.replaceChildren();this.path.forEach((id,i)=>{if(i){const s=document.createElement('span');s.className='sep';s.textContent='›';b.appendChild(s)}const x=document.createElement('span');x.className='crumb'+(i===this.path.length-1?' current':'');x.textContent=id;if(i<this.path.length-1)x.onclick=()=>this.jump(id);b.appendChild(x)})}
-grid(id,kids){const W=40,H=10,a=Array.from({length:H},()=>Array(W).fill(' '));for(let x=0;x<W;x++){a[0][x]='─';a[H-1][x]='─'}for(let y=0;y<H;y++){a[y][0]='│';a[y][W-1]='│'}a[0][0]='┌';a[0][W-1]='┐';a[H-1][0]='└';a[H-1][W-1]='┘';const title=` ${id} `,st=Math.max(1,Math.floor((W-[...title].length)/2));[...title].forEach((ch,i)=>{if(st+i<W-1)a[0][st+i]=ch});if(!kids.length){const m='（迷雾笼罩或无更细地点）',s=Math.max(1,Math.floor((W-[...m].length)/2));[...m].forEach((ch,i)=>{if(s+i<W-1)a[5][s+i]=ch})}else{kids.slice(0,12).forEach((n,i)=>{const row=2+(i%6),col=i<6?4:22;const txt=`${this.currentPos===n?'◉':this.symbol(n)} ${n.length>6?n.slice(0,6)+'…':n}`;[...txt].forEach((ch,j)=>{if(col+j<W-1)a[row][col+j]=ch})})}document.querySelector('#mapN-grid').textContent=a.map(r=>r.join('')).join('\n')}
-bottom(kids){const b=document.querySelector('#mapN-bottom');b.replaceChildren();if(!kids.length){const s=document.createElement('span');s.className='item muted';s.textContent='— 无已解锁子区域 —';b.appendChild(s);return}kids.forEach(id=>{const n=this.nodeMap[id],x=document.createElement('button');x.type='button';x.className='item'+(this.currentPos===id?' current':'');const sy=document.createElement('span');sy.className=`sym ${n.isWater?'water':n.isMountain?'mountain':'location'}`;sy.textContent=this.currentPos===id?'◉':this.symbol(id);x.append(sy,document.createTextNode(` ${id}`));x.onclick=()=>this.jump(id);b.appendChild(x)})}
-status(msg,error=false){const e=document.querySelector('#mapN-status');if(e){e.textContent=msg||'';e.classList.toggle('error',!!error)}}
-toggle(){const open=this.container.classList.toggle('open');if(open)this.render()}
-close(){this.container?.classList.remove('open')}
+
+const VERSION = '1.0.6';
+const ROOT = '世界舆图';
+const BASE = 'mapN_memory_v106';
+
+if (window.MapNInstance) return;
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const uniq = arr => [...new Set((arr || []).filter(Boolean))];
+const esc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const CHARACTER_CUES = /年龄|性别|外貌|容貌|性格|口头禅|人物设定|角色设定|NPC|姓名\s*[:：]|身份\s*[:：]|身高|体重|发色|瞳色/;
+const NON_GEO_NAME = /^(伤势|血脉|种族|境界|修为|功法|技能|法术|术法|装备|物品|道具|货币|经济|时间|天气|状态|属性|关系|好感|声望|规则|系统|设定|职业|天赋|灵根|体质|丹药|材料|任务|剧情|事件|历史|纪年|组织|势力|阵营|宗派体系|门派体系|港口|城镇|村落|地点|地区|区域|天下诸地)$/;
+const NON_GEO_CONTENT = /伤势等级|血脉等级|种族特性|境界划分|修为体系|功法品阶|技能等级|属性面板|好感度|声望值|货币体系|物品品阶|装备等级/;
+const GEO_SUFFIX = /(城|镇|村|寨|庄|港|岛|洲|州|郡|府|县|国|域|界|海|河|江|湖|湾|溪|潭|山|峰|岭|谷|原|林|泽|关|隘|堡|宫|殿|寺|观|塔|洞|窟|坊|街|巷|桥|渡|码头|营地|遗迹|秘境|禁地|宗|门)$/;
+const GEO_CUES = /位于|地处|坐落|处于|隶属于|属于|境内|辖下|辖区|附近|以东|以西|以南|以北|东侧|西侧|南侧|北侧|上游|下游|沿岸|海岸|山脚|山麓|山中|城内|城外|村内|村外|镇内|镇外|距离|毗邻|接壤|通往|入口|出口|地形|地貌|区域|地点|村庄|城池|城镇|港口|码头|山脉|河流|湖泊|海域|岛屿|道路|官道|街道/;
+
+function ctxSafe() {
+    try { return window.SillyTavern?.getContext?.() || null; }
+    catch (e) { console.warn('[Map-N] context 获取失败', e); return null; }
 }
-async function start(){if(window.MapNInstance)return;const x=new MapN();window.MapNInstance=x;await x.init()}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+
+function flatten(v, out = []) {
+    if (!v) return out;
+    if (Array.isArray(v)) { v.forEach(x => flatten(x, out)); return out; }
+    if (typeof v !== 'object') return out;
+    if (Array.isArray(v.key) || Array.isArray(v.keys) || Object.prototype.hasOwnProperty.call(v, 'content')) {
+        out.push(v); return out;
+    }
+    Object.values(v).forEach(x => flatten(x, out));
+    return out;
+}
+
+class MapN {
+    constructor() {
+        this.ctx = null;
+        this.root = { id: ROOT, children: [], parent: null };
+        this.nodeMap = {};
+        this.alias = new Map();
+        this.entries = [];
+        this.path = [ROOT];
+        this.discovered = new Set([ROOT]);
+        this.encountered = new Set();
+        this.currentPos = null;
+        this.currentChars = [];
+        this.container = null;
+        this.memoryKey = BASE;
+        this.bound = false;
+        this.lastSig = '';
+    }
+
+    async init() {
+        for (let i = 0; i < 30 && !this.ctx; i++) {
+            this.ctx = ctxSafe();
+            if (!this.ctx) await sleep(300);
+        }
+        if (!this.ctx) { console.error('[Map-N] SillyTavern context 不可用'); return; }
+        this.memoryKey = this.scopeKey();
+        this.load();
+        this.ui();
+        this.bindUI();
+        this.hooks();
+        await this.prime();
+        this.scanChat();
+        this.render();
+        console.log(`[Map-N] v${VERSION} 初始化完成。`);
+    }
+
+    scopeKey() {
+        const id = this.ctx?.getCurrentChatId?.() || this.ctx?.chatId || `char-${this.ctx?.characterId ?? 'unknown'}`;
+        return `${BASE}:${id}`;
+    }
+
+    save() {
+        try {
+            localStorage.setItem(this.memoryKey, JSON.stringify({
+                discovered: [...this.discovered], encountered: [...this.encountered],
+                currentPos: this.currentPos, currentChars: this.currentChars, path: this.path,
+            }));
+        } catch (e) { console.warn('[Map-N] 保存失败', e); }
+    }
+
+    load() {
+        try {
+            const d = JSON.parse(localStorage.getItem(this.memoryKey) || 'null');
+            if (!d) return;
+            this.discovered = new Set(d.discovered || [ROOT]);
+            this.discovered.add(ROOT);
+            this.encountered = new Set(d.encountered || []);
+            this.currentPos = d.currentPos || null;
+            this.currentChars = d.currentChars || [];
+            this.path = d.path?.length ? d.path : [ROOT];
+        } catch (e) { console.warn('[Map-N] 读取记忆失败', e); }
+    }
+
+    ui() {
+        document.querySelector('#mapN-container')?.remove();
+        document.querySelector('#mapN-float-btn')?.remove();
+        const c = document.createElement('div');
+        c.id = 'mapN-container';
+        c.innerHTML = `<div class="mapN-header"><h2>✦ <span>Map-N</span> 认知舆图</h2><div class="mapN-tools"><button id="mapN-refresh" title="重新读取当前世界书">↻</button><button id="mapN-zoomIn">＋</button><button id="mapN-zoomOut">－</button><button id="mapN-home">⟲</button><button id="mapN-close-btn">✕</button></div></div><div class="mapN-breadcrumb" id="mapN-breadcrumb"></div><div class="mapN-status" id="mapN-status"></div><div class="mapN-grid" id="mapN-grid"></div><div class="mapN-bottom" id="mapN-bottom"></div><div class="mapN-pos" id="mapN-pos"></div><div class="mapN-characters" id="mapN-characters"></div>`;
+        document.body.appendChild(c);
+        this.container = c;
+        c.querySelector('#mapN-close-btn').onclick = () => this.close();
+        c.querySelector('#mapN-home').onclick = () => { this.path = [ROOT]; this.render(); };
+        c.querySelector('#mapN-zoomOut').onclick = () => { if (this.path.length > 1) this.path.pop(); this.render(); };
+        c.querySelector('#mapN-zoomIn').onclick = () => { const x = this.children()[0]; if (x) this.jump(x); };
+        c.querySelector('#mapN-refresh').onclick = async () => { await this.prime(true); this.scanChat(); this.render(); };
+    }
+
+    bindUI() {
+        document.addEventListener('keydown', e => {
+            if (e.altKey && String(e.key).toLowerCase() === 'm') { e.preventDefault(); this.toggle(); }
+        });
+    }
+
+    hooks() {
+        if (this.bound) return;
+        const es = this.ctx.eventSource;
+        const et = this.ctx.eventTypes || this.ctx.event_types;
+        if (!es || !et) { this.status('事件系统不可用', true); return; }
+        const byIndex = i => {
+            const m = this.ctx.chat?.[Number(i)];
+            if (m?.mes) this.process(String(m.mes), !!m.is_user);
+        };
+        ['MESSAGE_RECEIVED', 'MESSAGE_SENT', 'MESSAGE_SWIPED', 'MESSAGE_UPDATED'].forEach(k => {
+            if (et[k]) es.on(et[k], byIndex);
+        });
+        if (et.WORLDINFO_ENTRIES_LOADED) es.on(et.WORLDINFO_ENTRIES_LOADED, d => { this.consumeWorld(d); this.render(); });
+        const reset = () => {
+            this.memoryKey = this.scopeKey();
+            this.path = [ROOT]; this.discovered = new Set([ROOT]); this.encountered = new Set();
+            this.currentPos = null; this.currentChars = [];
+            this.load();
+            this.prime(true).then(() => { this.scanChat(); this.render(); });
+        };
+        ['CHAT_CHANGED', 'CHARACTER_SELECTED'].forEach(k => { if (et[k]) es.on(et[k], reset); });
+        this.bound = true;
+    }
+
+    async prime(force = false) {
+        try {
+            const names = this.ctx.getWorldInfoNames?.() || [];
+            if (!names.length) { this.status('等待世界书加载；发送一轮消息后会自动读取。'); return; }
+            const all = [];
+            for (const n of names) {
+                try { const d = await this.ctx.loadWorldInfo?.(n); if (d) all.push(d); }
+                catch (e) { console.warn('[Map-N] 世界书读取失败', n, e); }
+            }
+            if (all.length) this.consumeWorld(all);
+            else if (force) this.status('没有读取到世界书条目。', true);
+        } catch (e) { this.status('读取世界书失败', true); console.error(e); }
+    }
+
+    consumeWorld(data) {
+        const entries = flatten(data);
+        if (!entries.length) return;
+        const sig = entries.map(e => `${e.uid ?? ''}:${(e.key || e.keys || []).join('|')}:${e.content || ''}`).join('\n');
+        if (sig === this.lastSig) return;
+        this.lastSig = sig;
+        this.entries = entries;
+        this.build(entries);
+        const locations = Object.values(this.nodeMap).filter(n => n.type === 'location').length;
+        this.status(`已读取 ${entries.length} 条世界书；识别地理节点 ${locations} 个。`);
+    }
+
+    entryKeys(e) {
+        return uniq([...(Array.isArray(e.key) ? e.key : []), ...(Array.isArray(e.keys) ? e.keys : [])])
+            .map(x => String(x).trim()).filter(x => x.length >= 2);
+    }
+
+    classify(id, content) {
+        const name = String(id || '').trim();
+        const c = String(content || '');
+        if (CHARACTER_CUES.test(c)) return 'character';
+        if (NON_GEO_NAME.test(name) || NON_GEO_CONTENT.test(c)) return 'other';
+        let score = 0;
+        if (GEO_SUFFIX.test(name)) score += 2;
+        if (GEO_CUES.test(c)) score += 2;
+        if (new RegExp(`(?:位于|地处|坐落于|处于|在)\\s*[^。；;]{0,40}${esc(name)}`).test(c)) score += 1;
+        if (/东|西|南|北|中央|边境|沿海|内陆/.test(name) && GEO_CUES.test(c)) score += 1;
+        return score >= 2 ? 'location' : 'other';
+    }
+
+    build(entries) {
+        const old = new Set(this.discovered);
+        const nodes = {};
+        const alias = new Map();
+        for (const e of entries) {
+            const keys = this.entryKeys(e);
+            if (!keys.length) continue;
+            const id = keys[0];
+            const content = String(e.content || '');
+            const type = this.classify(id, content);
+            if (!nodes[id]) nodes[id] = {
+                id, aliases: keys, content, type, children: [], parent: null,
+                isWater: /海|河|湖|江|溪|潭|湾|水域|水库/.test(id + content),
+                isMountain: /山|峰|岭|山脉|丘陵|崖|谷/.test(id + content),
+            };
+            keys.forEach(k => { if (!alias.has(k)) alias.set(k, id); });
+        }
+
+        const loc = Object.values(nodes).filter(n => n.type === 'location');
+        for (const n of loc) {
+            let best = null;
+            for (const p of loc) {
+                if (n === p) continue;
+                for (const name of [...p.aliases].sort((a, b) => b.length - a.length)) {
+                    const re = new RegExp(`(?:位于|地处|隶属于|属于|坐落于|处于|辖于|在)\\s*[^。；;，,]{0,24}${esc(name)}(?:境内|地区|区域|之中|内|中)?`);
+                    if (re.test(n.content)) {
+                        if (!best || name.length > best.name.length) best = { id: p.id, name };
+                        break;
+                    }
+                }
+            }
+            if (best && best.id !== n.id) { n.parent = best.id; nodes[best.id].children.push(n.id); }
+        }
+
+        this.root = { id: ROOT, children: [], parent: null };
+        for (const n of loc) {
+            if (!n.parent) { n.parent = ROOT; this.root.children.push(n.id); }
+            n.children = uniq(n.children).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+        }
+        this.root.children = uniq(this.root.children).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+        this.nodeMap = nodes;
+        this.alias = alias;
+        this.discovered = new Set([ROOT, ...[...old].filter(x => nodes[x]?.type === 'location')]);
+        if (this.currentPos && nodes[this.currentPos]?.type !== 'location') this.currentPos = null;
+        if (!this.validPath(this.path)) this.path = [ROOT];
+    }
+
+    validPath(p) {
+        return Array.isArray(p) && p[0] === ROOT && p.slice(1).every(x => this.nodeMap[x]?.type === 'location');
+    }
+
+    resolveMentions(text, type) {
+        const hits = [];
+        for (const [a, id] of [...this.alias.entries()].sort((x, y) => y[0].length - x[0].length)) {
+            if (text.includes(a) && this.nodeMap[id]?.type === type && !hits.includes(id)) hits.push(id);
+        }
+        return hits;
+    }
+
+    discover(id) {
+        const n = this.nodeMap[id];
+        if (!n || n.type !== 'location') return;
+        this.discovered.add(id);
+        let p = n.parent;
+        const seen = new Set();
+        while (p && p !== ROOT && !seen.has(p)) {
+            seen.add(p); this.discovered.add(p); p = this.nodeMap[p]?.parent;
+        }
+        this.discovered.add(ROOT);
+    }
+
+    locationFromText(text) {
+        const mentions = this.resolveMentions(text, 'location');
+        let best = null;
+        for (const id of mentions) {
+            const aliases = [...this.nodeMap[id].aliases].sort((a, b) => b.length - a.length);
+            for (const a of aliases) {
+                const q = esc(a);
+                const strong = [
+                    new RegExp(`(?:来到|抵达|到达|进入|走进|赶到|回到|返回到?|回了|回至|身处|现处|目前在|如今在|此刻在|正在|停留在|住在|落脚于|驻扎在|到了)\\s*[^。！？!?，,]{0,14}${q}`),
+                    new RegExp(`${q}[^。！？!?，,]{0,12}(?:到了|已到|落脚|驻扎|停留|住下|歇下|过夜|醒来|现身|出现)`),
+                    new RegExp(`(?:就在|仍在|还在|正处于|身在|位于)\\s*${q}`),
+                ];
+                if (strong.some(r => r.test(text))) {
+                    const idx = Math.max(...aliases.map(x => text.lastIndexOf(x)));
+                    if (!best || idx > best.idx) best = { id, idx };
+                }
+            }
+        }
+        return best?.id || null;
+    }
+
+    process(text, isUser = false) {
+        if (!text || !Object.keys(this.nodeMap).length) return;
+        const locs = this.resolveMentions(text, 'location');
+        const chars = this.resolveMentions(text, 'character');
+        locs.forEach(x => this.discover(x));
+        chars.forEach(x => this.encountered.add(x));
+        this.currentChars = chars;
+        if (!isUser) {
+            const pos = this.locationFromText(text);
+            if (pos) { this.discover(pos); this.currentPos = pos; this.path = this.pathTo(pos); }
+        }
+        this.save();
+        if (this.container?.classList.contains('open')) this.render();
+    }
+
+    scanChat() {
+        const chat = this.ctx.chat || [];
+        for (const m of chat) if (m?.mes) this.process(String(m.mes), !!m.is_user);
+    }
+
+    pathTo(id) {
+        const p = [], seen = new Set();
+        let x = id;
+        while (x && x !== ROOT && !seen.has(x)) { seen.add(x); p.unshift(x); x = this.nodeMap[x]?.parent; }
+        p.unshift(ROOT);
+        return p;
+    }
+
+    children() {
+        const id = this.path.at(-1);
+        const all = id === ROOT ? this.root.children : (this.nodeMap[id]?.children || []);
+        return all.filter(x => this.discovered.has(x));
+    }
+
+    jump(id) {
+        if (id === ROOT) this.path = [ROOT];
+        else if (this.discovered.has(id) && this.nodeMap[id]?.type === 'location') this.path = this.pathTo(id);
+        this.render();
+    }
+
+    symbol(id) {
+        const n = this.nodeMap[id];
+        return n?.isWater ? '~' : n?.isMountain ? '▲' : '◆';
+    }
+
+    render() {
+        if (!this.container) return;
+        const id = this.path.at(-1), kids = this.children();
+        this.breadcrumb(); this.grid(id, kids); this.bottom(kids);
+        const p = document.querySelector('#mapN-pos');
+        p.replaceChildren(document.createTextNode('📍 当前位置：'));
+        const h = document.createElement('span'); h.className = 'hl'; h.textContent = this.currentPos ? `◉ ${this.currentPos}` : '未定位'; p.appendChild(h);
+        const c = document.querySelector('#mapN-characters'); c.replaceChildren();
+        if (this.currentChars.length) {
+            c.style.display = 'block'; const l = document.createElement('span'); l.className = 'label'; l.textContent = '👤 本轮人物：'; c.appendChild(l);
+            this.currentChars.forEach(n => { const s = document.createElement('span'); s.className = 'name'; s.textContent = n; c.appendChild(s); });
+        } else c.style.display = 'none';
+        this.save();
+    }
+
+    breadcrumb() {
+        const b = document.querySelector('#mapN-breadcrumb'); b.replaceChildren();
+        this.path.forEach((id, i) => {
+            if (i) { const s = document.createElement('span'); s.className = 'sep'; s.textContent = '›'; b.appendChild(s); }
+            const x = document.createElement('span'); x.className = 'crumb' + (i === this.path.length - 1 ? ' current' : ''); x.textContent = id;
+            if (i < this.path.length - 1) x.onclick = () => this.jump(id); b.appendChild(x);
+        });
+    }
+
+    grid(id, kids) {
+        const mobile = window.innerWidth <= 600;
+        const W = mobile ? 28 : 40, H = mobile ? 12 : 10;
+        const a = Array.from({ length: H }, () => Array(W).fill(' '));
+        for (let x = 0; x < W; x++) { a[0][x] = '─'; a[H - 1][x] = '─'; }
+        for (let y = 0; y < H; y++) { a[y][0] = '│'; a[y][W - 1] = '│'; }
+        a[0][0] = '┌'; a[0][W - 1] = '┐'; a[H - 1][0] = '└'; a[H - 1][W - 1] = '┘';
+        const title = ` ${id} `, st = Math.max(1, Math.floor((W - [...title].length) / 2));
+        [...title].slice(0, W - 2).forEach((ch, i) => { if (st + i < W - 1) a[0][st + i] = ch; });
+        if (!kids.length) {
+            const m = mobile ? '（无已解锁子区域）' : '（迷雾笼罩或无更细地点）';
+            const s = Math.max(1, Math.floor((W - [...m].length) / 2)); [...m].forEach((ch, i) => { if (s + i < W - 1) a[Math.floor(H / 2)][s + i] = ch; });
+        } else {
+            const rows = H - 4, left = 3, right = mobile ? null : Math.floor(W / 2) + 1;
+            kids.slice(0, mobile ? rows : rows * 2).forEach((n, i) => {
+                const col = mobile ? left : (i < rows ? left : right);
+                const row = 2 + (i % rows);
+                const maxName = mobile ? 10 : 7;
+                const label = n.length > maxName ? n.slice(0, maxName) + '…' : n;
+                const txt = `${this.currentPos === n ? '◉' : this.symbol(n)} ${label}`;
+                [...txt].forEach((ch, j) => { if (col + j < W - 1) a[row][col + j] = ch; });
+            });
+        }
+        document.querySelector('#mapN-grid').textContent = a.map(r => r.join('')).join('\n');
+    }
+
+    bottom(kids) {
+        const b = document.querySelector('#mapN-bottom'); b.replaceChildren();
+        if (!kids.length) { const s = document.createElement('span'); s.className = 'item muted'; s.textContent = '— 无已解锁子区域 —'; b.appendChild(s); return; }
+        kids.forEach(id => {
+            const n = this.nodeMap[id], x = document.createElement('button'); x.type = 'button'; x.className = 'item' + (this.currentPos === id ? ' current' : '');
+            const sy = document.createElement('span'); sy.className = `sym ${n.isWater ? 'water' : n.isMountain ? 'mountain' : 'location'}`; sy.textContent = this.currentPos === id ? '◉' : this.symbol(id);
+            x.append(sy, document.createTextNode(` ${id}`)); x.onclick = () => this.jump(id); b.appendChild(x);
+        });
+    }
+
+    status(msg, error = false) {
+        const e = document.querySelector('#mapN-status');
+        if (e) { e.textContent = msg || ''; e.classList.toggle('error', !!error); }
+    }
+
+    toggle() { const open = this.container?.classList.toggle('open'); if (open) this.render(); }
+    close() { this.container?.classList.remove('open'); }
+}
+
+async function start() {
+    if (window.MapNInstance) return;
+    const x = new MapN(); window.MapNInstance = x; await x.init();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
 })();
