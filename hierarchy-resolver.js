@@ -1,5 +1,5 @@
-// Map-N geographic hierarchy resolver v1.1.0
-// Canonicalize worldbook geography first, then infer hierarchy from both local and global relation text.
+// Map-N geographic hierarchy resolver v1.2.0
+// Canonicalize worldbook geography first, then infer hierarchy from explicit relations and conservative place semantics.
 
 const MAPN_ROOT = '世界舆图';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -8,6 +8,16 @@ const unique = arr => [...new Set((arr || []).filter(Boolean))];
 const GEO_SUFFIX_RE = /(?:城|镇|村|寨|庄|港|岛|洲|州|郡|府|县|国|域|界|海|河|江|湖|湾|溪|潭|山|峰|岭|谷|原|林|泽|关|隘|堡|宫|殿|寺|观|塔|洞|窟|坊|街|巷|桥|渡|码头|营地|遗迹|秘境|禁地|宗|门|海域|山系)$/;
 const GENERIC_COMMENT_RE = /^(?:世界板块总览|世界主要板块|地图|世界地图|天下诸地|区域关系|空间关系|世界关系|地理关系)$/;
 const GENERIC_ALIAS_RE = /^(?:北方海域|南方海域|东方海域|西方海域|未知区域|未知海域|远海|近海|区域|地区|地点|海域|城镇|村落|板块|地图|大陆)$/;
+
+// Conservative semantic fallback. These words encode their own parent type.
+// We deliberately do NOT include generic shops/houses here: they need textual evidence.
+const SETTLEMENT_INTERNAL_RULES = [
+    { re:/^(?:村口|村头|村尾|村中|村里|村内|村外缘)$/, parent:/村$/ },
+    { re:/^(?:镇口|镇头|镇中|镇内)$/, parent:/镇$/ },
+    { re:/^(?:城门|城中|城内|城郊|城外缘)$/, parent:/城$/ },
+    { re:/^(?:寨门|寨口|寨中|寨内)$/, parent:/寨$/ },
+    { re:/^(?:庄口|庄中|庄内)$/, parent:/庄$/ },
+];
 
 function rawKeys(entry) {
     return unique([...(Array.isArray(entry?.key) ? entry.key : []), ...(Array.isArray(entry?.keys) ? entry.keys : [])]
@@ -62,7 +72,6 @@ function normalizeWorldbookGeography(inst) {
             node.aliases = unique([...(node.aliases || []), ...aliases]);
             if (!node.content || node.content === '剧情中确认的地点') node.content = content;
         }
-        // Remove malformed core nodes created from a composite trigger key of this same entry.
         for (const raw of rawKeys(entry)) {
             if (raw === name) continue;
             const bad = inst.nodeMap?.[raw];
@@ -72,7 +81,6 @@ function normalizeWorldbookGeography(inst) {
             }
         }
     }
-    // Rebuild aliases after canonicalization. A canonical place name always wins over being another entry's trigger alias.
     inst.alias = new Map();
     for (const n of Object.values(inst.nodeMap || {})) {
         if (!n?.aliases) continue;
@@ -134,6 +142,31 @@ function rebuildChildren(inst) {
     for(const n of nodes)n.children=unique(n.children).sort((a,b)=>String(a).localeCompare(String(b),'zh-CN'));
     inst.root.children=unique(inst.root.children).sort((a,b)=>String(a).localeCompare(String(b),'zh-CN'));
 }
+
+function semanticParent(inst, child, nodes) {
+    const childName = String(child?.displayName || child?.id || '').trim();
+    const rule = SETTLEMENT_INTERNAL_RULES.find(r => r.re.test(childName));
+    if (!rule) return null;
+    const candidates = nodes.filter(n => n !== child && rule.parent.test(String(n?.displayName || n?.id || '')) && !wouldCycle(inst, child.id, n.id));
+    if (!candidates.length) return null;
+
+    // Textual evidence wins immediately.
+    const evidenced = candidates.map(parent => ({ parent, score:relationScore(inst, child, parent) }))
+        .filter(x => x.score > 0).sort((a,b) => b.score - a.score);
+    if (evidenced.length && (evidenced.length === 1 || evidenced[0].score > evidenced[1].score)) return evidenced[0].parent;
+
+    // If the child already sits under a broader region, prefer the only matching settlement in that same region.
+    const broadParent = child.parent && child.parent !== MAPN_ROOT ? child.parent : null;
+    if (broadParent) {
+        const sameRegion = candidates.filter(p => p.parent === broadParent);
+        if (sameRegion.length === 1) return sameRegion[0];
+    }
+
+    // Safe fallback: exactly one plausible settlement exists in the whole discovered map.
+    // This fixes e.g. 村口 -> 鸥尾村 without guessing when multiple villages exist.
+    return candidates.length === 1 ? candidates[0] : null;
+}
+
 function reconcileHierarchy(inst) {
     const normalized=normalizeWorldbookGeography(inst); const nodes=locationNodes(inst); if(!nodes.length)return normalized;
     let changed=normalized;
@@ -141,15 +174,17 @@ function reconcileHierarchy(inst) {
         if(child.learned&&child.parent&&child.parent!==MAPN_ROOT)continue;
         let best=null;
         for(const parent of nodes){if(parent===child)continue;const score=relationScore(inst,child,parent);if(!score||wouldCycle(inst,child.id,parent.id))continue;if(!best||score>best.score||(score===best.score&&aliasesOf(parent)[0]?.length>aliasesOf(best.parent)[0]?.length))best={parent,score};}
-        if(best&&best.score>=5&&child.parent!==best.parent.id){child.parent=best.parent.id;changed++;}
+        if(best&&best.score>=5&&child.parent!==best.parent.id){child.parent=best.parent.id;changed++;continue;}
+        const semantic = semanticParent(inst, child, nodes);
+        if(semantic && child.parent !== semantic.id){child.parent=semantic.id;changed++;}
     }
     if(changed){rebuildChildren(inst);if(inst.currentPos&&inst.nodeMap?.[inst.currentPos])inst.path=inst.pathTo(inst.currentPos);inst.save?.();}
     return changed;
 }
 async function installHierarchyResolver(){
-    for(let i=0;i<100&&!window.MapNInstance;i++)await delay(100);const inst=window.MapNInstance;if(!inst||inst.__mapNHierarchyResolver110)return;inst.__mapNHierarchyResolver110=true;
+    for(let i=0;i<100&&!window.MapNInstance;i++)await delay(100);const inst=window.MapNInstance;if(!inst||inst.__mapNHierarchyResolver120)return;inst.__mapNHierarchyResolver120=true;
     const previousBuild=inst.build.bind(inst);inst.build=function(entries){previousBuild(entries);reconcileHierarchy(this);};
     const changed=reconcileHierarchy(inst);if(changed&&inst.container?.classList.contains('open'))inst.render();
-    console.log(`[Map-N] hierarchy resolver v1.1.0 installed; normalized/corrected ${changed} item(s).`);
+    console.log(`[Map-N] hierarchy resolver v1.2.0 installed; normalized/corrected ${changed} item(s).`);
 }
 installHierarchyResolver();
