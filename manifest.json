@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.4.0",
-  "description": "认知舆图：自动跟随 SillyTavern 明暗界面，保留聊天隔离、回溯同步与调试日志",
+  "version": "1.4.1",
+  "description": "认知舆图：微暖白天主题，并在设置中支持自动、白天、夜间三种持久化外观模式",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
