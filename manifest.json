@@ -6,7 +6,7 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "层级认知地图，自动从对话与世界书中学习并解锁区域",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
