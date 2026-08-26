@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.4.2",
-  "description": "认知舆图：增加保守的聚落内部地点语义层级推断，例如村口归入对应村庄",
+  "version": "1.4.3",
+  "description": "认知舆图：补充集市、老屋等聚落内部地点的上下文归属推断，并保持保守层级判断",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
