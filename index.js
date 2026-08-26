@@ -1,4 +1,4 @@
-// Map-N bootstrap v1.0.5
+// Map-N bootstrap v1.0.6
 // Integrate Map-N into SillyTavern's native magic-wand extensions menu.
 
 async function waitForElement(selector, timeout = 15000) {
@@ -48,28 +48,21 @@ function installWandEntry() {
 
     const wandButton = document.querySelector('#extensionsMenuButton');
     if (wandButton) wandButton.style.display = '';
-
-    // Map-N now lives in the native wand menu; never keep a floating launcher.
     document.querySelector('#mapN-float-btn')?.remove();
     return true;
 }
 
 try {
     const { getContext } = await import('/scripts/extensions.js');
-    if (typeof getContext !== 'function') {
-        throw new Error('SillyTavern /scripts/extensions.js 未导出 getContext');
-    }
+    if (typeof getContext !== 'function') throw new Error('SillyTavern /scripts/extensions.js 未导出 getContext');
 
     window.SillyTavern = window.SillyTavern || {};
     window.SillyTavern.getContext = getContext;
 
-    await import('./Map-N.js?v=1.0.5');
+    await import('./Map-N.js?v=1.0.6');
 
     await waitForElement('#extensionsMenu');
     installWandEntry();
-
-    // Core v1.0.1 still creates its old floating button during init, so remove it
-    // again after a short delay and ensure the wand entry remains installed.
     setTimeout(() => {
         document.querySelector('#mapN-float-btn')?.remove();
         installWandEntry();
