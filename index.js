@@ -1,4 +1,4 @@
-// Map-N bootstrap v1.0.6
+// Map-N bootstrap v1.0.7
 // Integrate Map-N into SillyTavern's native magic-wand extensions menu.
 
 async function waitForElement(selector, timeout = 15000) {
@@ -59,7 +59,7 @@ try {
     window.SillyTavern = window.SillyTavern || {};
     window.SillyTavern.getContext = getContext;
 
-    await import('./Map-N.js?v=1.0.6');
+    await import('./Map-N.js?v=1.0.7');
 
     await waitForElement('#extensionsMenu');
     installWandEntry();
