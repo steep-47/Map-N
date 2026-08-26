@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.2.1",
-  "description": "认知舆图：紧凑移动端布局、右侧竖向工具栏、可点击层级地图与一键回到当前位置",
+  "version": "1.2.2",
+  "description": "认知舆图：紧凑移动端布局、下移地图面板、右侧低位竖向工具栏、可点击层级地图",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
