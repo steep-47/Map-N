@@ -1,4 +1,4 @@
-// Map-N geographic hierarchy resolver v1.2.0
+// Map-N geographic hierarchy resolver v1.2.1
 // Canonicalize worldbook geography first, then infer hierarchy from explicit relations and conservative place semantics.
 
 const MAPN_ROOT = '世界舆图';
@@ -9,8 +9,7 @@ const GEO_SUFFIX_RE = /(?:城|镇|村|寨|庄|港|岛|洲|州|郡|府|县|国|�
 const GENERIC_COMMENT_RE = /^(?:世界板块总览|世界主要板块|地图|世界地图|天下诸地|区域关系|空间关系|世界关系|地理关系)$/;
 const GENERIC_ALIAS_RE = /^(?:北方海域|南方海域|东方海域|西方海域|未知区域|未知海域|远海|近海|区域|地区|地点|海域|城镇|村落|板块|地图|大陆)$/;
 
-// Conservative semantic fallback. These words encode their own parent type.
-// We deliberately do NOT include generic shops/houses here: they need textual evidence.
+// Type-explicit settlement subplaces: the name itself tells us what parent kind to seek.
 const SETTLEMENT_INTERNAL_RULES = [
     { re:/^(?:村口|村头|村尾|村中|村里|村内|村外缘)$/, parent:/村$/ },
     { re:/^(?:镇口|镇头|镇中|镇内)$/, parent:/镇$/ },
@@ -18,6 +17,11 @@ const SETTLEMENT_INTERNAL_RULES = [
     { re:/^(?:寨门|寨口|寨中|寨内)$/, parent:/寨$/ },
     { re:/^(?:庄口|庄中|庄内)$/, parent:/庄$/ },
 ];
+
+// Context-dependent settlement interiors. These are not globally tied to one settlement type,
+// so they may only be re-parented when relation/context evidence identifies a unique nearby settlement.
+const CONTEXTUAL_INTERNAL_RE = /^(?:集市|市集|墟市|圩市|集镇市集|老屋|旧屋|空屋|老宅|旧宅|祖屋|民居|祠堂|宗祠|药铺|药房|医馆|客栈|酒馆|茶馆|饭馆|食肆|铁匠铺|杂货铺|商铺|店铺|院子|院落|广场|晒谷场|戏台|学堂|私塾)$/;
+const SETTLEMENT_PARENT_RE = /(?:村|镇|城|寨|庄)$/;
 
 function rawKeys(entry) {
     return unique([...(Array.isArray(entry?.key) ? entry.key : []), ...(Array.isArray(entry?.keys) ? entry.keys : [])]
@@ -143,28 +147,44 @@ function rebuildChildren(inst) {
     inst.root.children=unique(inst.root.children).sort((a,b)=>String(a).localeCompare(String(b),'zh-CN'));
 }
 
-function semanticParent(inst, child, nodes) {
-    const childName = String(child?.displayName || child?.id || '').trim();
-    const rule = SETTLEMENT_INTERNAL_RULES.find(r => r.re.test(childName));
-    if (!rule) return null;
-    const candidates = nodes.filter(n => n !== child && rule.parent.test(String(n?.displayName || n?.id || '')) && !wouldCycle(inst, child.id, n.id));
+function chooseContextualSettlement(inst, child, candidates) {
     if (!candidates.length) return null;
 
-    // Textual evidence wins immediately.
+    // Explicit textual relation always wins.
     const evidenced = candidates.map(parent => ({ parent, score:relationScore(inst, child, parent) }))
         .filter(x => x.score > 0).sort((a,b) => b.score - a.score);
     if (evidenced.length && (evidenced.length === 1 || evidenced[0].score > evidenced[1].score)) return evidenced[0].parent;
 
-    // If the child already sits under a broader region, prefer the only matching settlement in that same region.
+    // Most useful implicit signal: both the interior place and exactly one settlement currently share
+    // the same broader region. Example: 无名海 -> 鸥尾村 and 无名海 -> 集市 becomes 鸥尾村 -> 集市.
     const broadParent = child.parent && child.parent !== MAPN_ROOT ? child.parent : null;
     if (broadParent) {
         const sameRegion = candidates.filter(p => p.parent === broadParent);
         if (sameRegion.length === 1) return sameRegion[0];
     }
 
-    // Safe fallback: exactly one plausible settlement exists in the whole discovered map.
-    // This fixes e.g. 村口 -> 鸥尾村 without guessing when multiple villages exist.
+    // If the current navigation path contains a settlement, it is a strong local-context hint.
+    const path = Array.isArray(inst.path) ? inst.path : [];
+    const pathSettlements = candidates.filter(p => path.includes(p.id));
+    if (pathSettlements.length === 1) return pathSettlements[0];
+
+    // Final conservative fallback: only one plausible settlement exists at all.
     return candidates.length === 1 ? candidates[0] : null;
+}
+
+function semanticParent(inst, child, nodes) {
+    const childName = String(child?.displayName || child?.id || '').trim();
+    const explicitRule = SETTLEMENT_INTERNAL_RULES.find(r => r.re.test(childName));
+    if (explicitRule) {
+        const candidates = nodes.filter(n => n !== child && explicitRule.parent.test(String(n?.displayName || n?.id || '')) && !wouldCycle(inst, child.id, n.id));
+        return chooseContextualSettlement(inst, child, candidates);
+    }
+
+    if (CONTEXTUAL_INTERNAL_RE.test(childName)) {
+        const candidates = nodes.filter(n => n !== child && SETTLEMENT_PARENT_RE.test(String(n?.displayName || n?.id || '')) && !wouldCycle(inst, child.id, n.id));
+        return chooseContextualSettlement(inst, child, candidates);
+    }
+    return null;
 }
 
 function reconcileHierarchy(inst) {
@@ -182,9 +202,9 @@ function reconcileHierarchy(inst) {
     return changed;
 }
 async function installHierarchyResolver(){
-    for(let i=0;i<100&&!window.MapNInstance;i++)await delay(100);const inst=window.MapNInstance;if(!inst||inst.__mapNHierarchyResolver120)return;inst.__mapNHierarchyResolver120=true;
+    for(let i=0;i<100&&!window.MapNInstance;i++)await delay(100);const inst=window.MapNInstance;if(!inst||inst.__mapNHierarchyResolver121)return;inst.__mapNHierarchyResolver121=true;
     const previousBuild=inst.build.bind(inst);inst.build=function(entries){previousBuild(entries);reconcileHierarchy(this);};
     const changed=reconcileHierarchy(inst);if(changed&&inst.container?.classList.contains('open'))inst.render();
-    console.log(`[Map-N] hierarchy resolver v1.2.0 installed; normalized/corrected ${changed} item(s).`);
+    console.log(`[Map-N] hierarchy resolver v1.2.1 installed; normalized/corrected ${changed} item(s).`);
 }
 installHierarchyResolver();
