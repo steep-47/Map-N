@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.3.2",
-  "description": "认知舆图：修复手机端数据与调试面板定位，保留聊天隔离与回溯同步",
+  "version": "1.3.3",
+  "description": "认知舆图：下移手机端数据与调试面板，保留聊天隔离、回溯同步与调试日志",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
