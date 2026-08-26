@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.2.7",
-  "description": "认知舆图：规范化世界书地理层级，并以场景状态机维护当前在场人物",
+  "version": "1.3.0",
+  "description": "认知舆图：聊天隔离的数据导入导出、清空、剧情回溯同步与可选调试日志",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
