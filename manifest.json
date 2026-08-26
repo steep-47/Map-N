@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.4.1",
-  "description": "认知舆图：微暖白天主题，并在设置中支持自动、白天、夜间三种持久化外观模式",
+  "version": "1.4.2",
+  "description": "认知舆图：增加保守的聚落内部地点语义层级推断，例如村口归入对应村庄",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
