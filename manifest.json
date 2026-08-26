@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.0.10",
-  "description": "层级认知地图，自动从对话与世界书中学习区域、当前位置与在场人物",
+  "version": "1.1.0",
+  "description": "认知舆图：持久学习地点、实时定位，并保守识别当前可见人物与身份升级",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
