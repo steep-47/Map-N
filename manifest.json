@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.2.0",
-  "description": "认知舆图：持久学习地点、实时定位、可点击层级地图与一键回到当前位置",
+  "version": "1.2.1",
+  "description": "认知舆图：紧凑移动端布局、右侧竖向工具栏、可点击层级地图与一键回到当前位置",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
