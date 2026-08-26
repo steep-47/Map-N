@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.2.4",
-  "description": "认知舆图：恢复稳定菜单入口，采用安全的移动端下移定位与低位右侧工具栏",
+  "version": "1.2.5",
+  "description": "认知舆图：保留稳定移动端交互，并增强世界书地理父子层级解析",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
