@@ -1,5 +1,5 @@
-// Map-N bootstrap v1.0.3
-// Visible-first bootstrap: prove that SillyTavern loaded this entry before importing any API.
+// Map-N bootstrap v1.0.4
+// Use the same absolute SillyTavern module path pattern as working third-party extensions.
 
 const makeButton = (id, text, border, color, title, onClick) => {
     let button = document.getElementById(id);
@@ -27,7 +27,6 @@ const makeButton = (id, text, border, color, title, onClick) => {
     return button;
 };
 
-// If this appears, manifest -> index.js loading works.
 const bootButton = makeButton(
     'mapN-bootstrap-status',
     '🗺️…',
@@ -38,19 +37,16 @@ const bootButton = makeButton(
 );
 
 try {
-    // Dynamic import is intentionally inside try/catch so import failures are visible.
-    const mod = await import('../../../extensions.js');
+    const mod = await import('/scripts/extensions.js');
     const getContext = mod?.getContext;
     if (typeof getContext !== 'function') {
-        throw new Error('SillyTavern extensions.js 未导出 getContext');
+        throw new Error('SillyTavern /scripts/extensions.js 未导出 getContext');
     }
 
     window.SillyTavern = window.SillyTavern || {};
     window.SillyTavern.getContext = getContext;
 
-    await import('./Map-N.js');
-
-    // Core creates its own map button. Remove the temporary bootstrap indicator.
+    await import('./Map-N.js?v=1.0.4');
     bootButton?.remove();
 } catch (error) {
     console.error('[Map-N] 启动失败：', error);
