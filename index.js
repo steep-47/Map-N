@@ -1,4 +1,4 @@
-// Map-N bootstrap v1.2.5
+// Map-N bootstrap v1.2.6
 async function waitForElement(selector, timeout = 15000) {
     const start = Date.now();
     while (Date.now() - start < timeout) {
@@ -20,8 +20,8 @@ function installWandEntry() {
 try {
     const { getContext }=await import('/scripts/extensions.js'); if(typeof getContext!=='function')throw new Error('SillyTavern /scripts/extensions.js 未导出 getContext');
     window.SillyTavern=window.SillyTavern||{};window.SillyTavern.getContext=getContext;
-    await import('./Map-N.js?v=1.2.5');
-    await import('./scene-scanner.js?v=1.2.5');
-    await import('./hierarchy-resolver.js?v=1.2.5');
+    await import('./Map-N.js?v=1.2.6');
+    await import('./scene-scanner.js?v=1.2.6');
+    await import('./hierarchy-resolver.js?v=1.2.6');
     await waitForElement('#extensionsMenu');installWandEntry();setTimeout(()=>{document.querySelector('#mapN-float-btn')?.remove();installWandEntry()},800);
 } catch(error){console.error('[Map-N] 启动失败：',error)}
