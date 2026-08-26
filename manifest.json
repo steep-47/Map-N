@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.2.6",
-  "description": "认知舆图：规范化世界书地点实体，并从全局关系条目解析地理层级",
+  "version": "1.2.7",
+  "description": "认知舆图：规范化世界书地理层级，并以场景状态机维护当前在场人物",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
