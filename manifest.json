@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.0",
-  "description":"认知舆图：统一地点规范化、层级推断与人物句法识别，并加入固定回归测试",
+  "version":"1.5.1",
+  "description":"认知舆图：编译统一地点图，合并同名世界书/剧情节点并在渲染前确定层级",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
