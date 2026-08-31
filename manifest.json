@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.3",
-  "description":"认知舆图：按 SillyTavern 聊天文件独立存储地图，并在切换剧情时刷新上下文快照",
+  "version":"1.5.4",
+  "description":"认知舆图：按最近语义父地点构建层级，避免世界书中的宽泛祖先描述把峪/谷道/路段拍平",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
