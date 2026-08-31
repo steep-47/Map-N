@@ -1,3 +1,13 @@
 {
-  "display_name":"Map-N","loading_order":20,"requires":[],"optional":[],"js":"index.js","css":"Map-N.css","author":"Map-N","version":"1.4.9","description":"认知舆图：统一世界书节点与剧情学习路径的地点层级，修复峪/谷道/路段并排问题","homePage":"https://github.com/steep-47/Map-N","auto_update":true
+  "display_name":"Map-N",
+  "loading_order":20,
+  "requires":[],
+  "optional":[],
+  "js":"index.js",
+  "css":"Map-N.css",
+  "author":"Map-N",
+  "version":"1.5.0",
+  "description":"认知舆图：统一地点规范化、层级推断与人物句法识别，并加入固定回归测试",
+  "homePage":"https://github.com/steep-47/Map-N",
+  "auto_update":true
 }
