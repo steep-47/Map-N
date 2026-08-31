@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.4",
-  "description":"认知舆图：按最近语义父地点构建层级，避免世界书中的宽泛祖先描述把峪/谷道/路段拍平",
+  "version":"1.5.5",
+  "description":"认知舆图：场景头路径只作为祖先证据，最近语义父地点优先，修复沉陆下地点被拍平",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
