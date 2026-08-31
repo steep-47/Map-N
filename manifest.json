@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.4.4",
-  "description": "认知舆图：修复时间戳被并入地点名、历史地点污染迁移与人物称谓误切分",
+  "version": "1.4.5",
+  "description": "认知舆图：合并带完整或截断括号定位说明的同一地点，并继续清理历史地点污染",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
