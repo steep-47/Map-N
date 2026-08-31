@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.4.6",
-  "description": "认知舆图：清理括号定位说明泄漏出的伪地点，并过滤明显的人物误识别片段",
+  "version": "1.4.7",
+  "description": "认知舆图：在入口规范化异常括号地点键，并用正向证据重做人名识别，撤销删节点式兜底",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
