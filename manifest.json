@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.4.7",
-  "description": "认知舆图：在入口规范化异常括号地点键，并用正向证据重做人名识别，撤销删节点式兜底",
+  "version": "1.4.8",
+  "description": "认知舆图：按复合地名语义建立峪谷道路层级，并以主语/谓语/对话证据识别人名",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }
