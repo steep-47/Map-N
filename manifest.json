@@ -1,13 +1,3 @@
 {
-  "display_name": "Map-N",
-  "loading_order": 20,
-  "requires": [],
-  "optional": [],
-  "js": "index.js",
-  "css": "Map-N.css",
-  "author": "Map-N",
-  "version": "1.4.8",
-  "description": "认知舆图：按复合地名语义建立峪谷道路层级，并以主语/谓语/对话证据识别人名",
-  "homePage": "https://github.com/steep-47/Map-N",
-  "auto_update": true
+  "display_name":"Map-N","loading_order":20,"requires":[],"optional":[],"js":"index.js","css":"Map-N.css","author":"Map-N","version":"1.4.9","description":"认知舆图：统一世界书节点与剧情学习路径的地点层级，修复峪/谷道/路段并排问题","homePage":"https://github.com/steep-47/Map-N","auto_update":true
 }
