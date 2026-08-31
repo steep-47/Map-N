@@ -7,6 +7,8 @@ same(core.normalizeLocationParts('08:30 | 沉陆 · 石峪 · 石峪西侧旧谷
 same(core.parseHeaderLocation('【08:30 | 沉陆 · 石峪 · 石峪西侧旧谷道（旧墙墙根洞口旁）】\n正文'),['沉陆','石峪','石峪西侧旧谷道'],'header hierarchy');
 if(!(core.parentScore('石峪西侧旧谷道','石峪')>0))throw new Error('峪 should parent compound 谷道');
 if(!(core.parentScore('石峪西侧旧谷道北段','石峪西侧旧谷道')>core.parentScore('石峪西侧旧谷道北段','石峪')))throw new Error('longest semantic parent should win');
+if(!(core.hierarchyRelationScore('石峪西侧旧谷道','石峪')>core.hierarchyRelationScore('石峪西侧旧谷道','沉陆',{explicit:true})))throw new Error('immediate semantic parent must beat broad explicit ancestor');
+if(!(core.hierarchyRelationScore('石峪西侧旧谷道北段','石峪西侧旧谷道')>core.hierarchyRelationScore('石峪西侧旧谷道北段','沉陆',{explicit:true})))throw new Error('route segment must stay under route, not flatten to region');
 setSame(core.extractPeople('霍三在旁边低声道：“陈望，先让你爷爷歇会儿。”'),['霍三','你爷爷'],'subject + controlled relation person');
 setSame(core.extractPeople('陈望摆了摆手，又看向你：“等伤药。”'),['陈望'],'subject boundary');
 setSame(core.extractPeople('霍三和陈望回村。'),['霍三','陈望'],'coordinated subjects');
