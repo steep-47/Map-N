@@ -1,31 +1,126 @@
-// Map-N scene scanner v1.1.2
+// Map-N scene scanner v1.2.0
 // Durable cognitive locations + conservative, role-based visible entity parsing.
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const uniq = arr => [...new Set((arr || []).map(x => String(x).trim()).filter(Boolean))];
 const ROOT = '世界舆图';
-const MEMORY_VERSION = 2;
+const MEMORY_VERSION = 3;
 
 function scopeStoreKey(inst) { return `${inst.memoryKey}:scene-v2`; }
 function emptyStore() { return { version: MEMORY_VERSION, learnedLocations: {}, knownCharacters: {} }; }
-function loadStore(inst) { try { return { ...emptyStore(), ...(JSON.parse(localStorage.getItem(scopeStoreKey(inst)) || 'null') || {}) }; } catch { return emptyStore(); } }
+function loadStore(inst) {
+    try {
+        const raw = JSON.parse(localStorage.getItem(scopeStoreKey(inst)) || 'null') || {};
+        return { ...emptyStore(), ...raw, learnedLocations: raw.learnedLocations || {}, knownCharacters: raw.knownCharacters || {} };
+    } catch { return emptyStore(); }
+}
 function saveStore(inst) { try { localStorage.setItem(scopeStoreKey(inst), JSON.stringify(inst.__mapNSceneStore || emptyStore())); } catch (e) { console.warn('[Map-N] 场景记忆保存失败', e); } }
 
+const TIME_PREFIX_RE = /^\s*(?:(?:\d{1,6}年\d{1,2}月\d{1,2}日)|(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(?:\d{1,2}月\d{1,2}日))?(?:\s*(?:周[一二三四五六日天]|星期[一二三四五六日天]))?(?:\s*(?:上午|下午|晚上|夜间|凌晨|清晨|早上|中午|傍晚))?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*[|｜]\s*/u;
+const BARE_TIME_PREFIX_RE = /^\s*(?:\d{1,2}:\d{2}(?::\d{2})?)\s*[|｜]\s*/u;
+
+function stripTimestampPrefix(value) {
+    let s = String(value || '').trim();
+    // Strip only a timestamp/date-shaped field before a pipe. Arbitrary place names containing a
+    // pipe are deliberately left alone.
+    for (let i = 0; i < 2; i++) {
+        const next = s.replace(TIME_PREFIX_RE, '').replace(BARE_TIME_PREFIX_RE, '').trim();
+        if (next === s) break;
+        s = next;
+    }
+    return s;
+}
+
+function normalizeLocationParts(raw) {
+    const source = stripTimestampPrefix(String(raw || '').replace(/^(?:【|\[)\s*|\s*(?:】|\])$/g, ''));
+    if (!source) return [];
+    return source
+        .split(/\s*[·•›>→/／]+\s*/)
+        .map(x => stripTimestampPrefix(x).trim())
+        .filter(x => x.length >= 2 && x.length <= 30 && !/^\d{1,2}:\d{2}(?::\d{2})?$/.test(x));
+}
+
 function parseHeaderLocation(text) {
-    const head = String(text || '').split(/\n/).slice(0, 6).join('\n');
-    const m = head.match(/[【\[]\s*((?:(?:\d{1,6}年\d{1,2}月\d{1,2}日)|(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(?:\d{1,2}月\d{1,2}日))(?:[^|｜】\]\n]{0,30})?|(?:\d{1,2}:\d{2})(?:[^|｜】\]\n]{0,20})?)\s*[|｜]\s*([^】\]\n]+)[】\]]/);
-    if (!m) return null;
-    const parts = m[2].trim().split(/\s*[·•›>→/／]+\s*/).map(x => x.trim()).filter(x => x.length >= 2 && x.length <= 30);
-    return parts.length ? parts : null;
+    const head = String(text || '').split(/\n/).slice(0, 8).join('\n');
+    const lines = head.split(/\n/).map(x => x.trim()).filter(Boolean);
+
+    // Preferred form: 【08:00 | 沉陆】 / [2026-08-31 08:00 | 沉陆]
+    for (const line of lines) {
+        const bracket = line.match(/[【[]\s*([^】\]\n]+)\s*[】\]]/u);
+        if (!bracket) continue;
+        const body = bracket[1].trim();
+        if (!TIME_PREFIX_RE.test(body) && !BARE_TIME_PREFIX_RE.test(body)) continue;
+        const parts = normalizeLocationParts(body);
+        if (parts.length) return parts;
+    }
+
+    // Also accept a bare status line such as "08:00 | 沉陆", but only near the message header.
+    for (const line of lines) {
+        if (!TIME_PREFIX_RE.test(line) && !BARE_TIME_PREFIX_RE.test(line)) continue;
+        const parts = normalizeLocationParts(line);
+        if (parts.length) return parts;
+    }
+    return null;
 }
 
 function locKey(parts, index) { return parts.slice(0, index + 1).join('／'); }
+function canonicalizeStoredPath(value) {
+    const raw = String(value || '').trim();
+    if (!raw || raw === ROOT) return raw;
+    const parts = raw.split('／').flatMap(x => normalizeLocationParts(x));
+    return parts.length ? parts.join('／') : raw;
+}
+
+function migrateLearnedLocations(inst) {
+    const store = inst.__mapNSceneStore ||= emptyStore();
+    const learned = store.learnedLocations || {};
+    const migrated = {};
+    let changed = store.version !== MEMORY_VERSION;
+
+    for (const rec of Object.values(learned)) {
+        const idParts = String(rec?.id || '').split('／').flatMap(x => normalizeLocationParts(x));
+        const label = normalizeLocationParts(rec?.label || '').at(-1) || idParts.at(-1) || String(rec?.label || rec?.id || '').trim();
+        if (!label) continue;
+        const canonicalId = idParts.length ? idParts.join('／') : canonicalizeStoredPath(rec?.id || label);
+        const canonicalParent = rec?.parent && rec.parent !== ROOT ? canonicalizeStoredPath(rec.parent) : ROOT;
+        const aliases = uniq([label, ...(rec?.aliases || []).flatMap(a => {
+            const parts = normalizeLocationParts(a);
+            return parts.length ? [parts.at(-1)] : [];
+        })]);
+        if (canonicalId !== rec?.id || label !== rec?.label || canonicalParent !== (rec?.parent || ROOT)) changed = true;
+        const old = migrated[canonicalId];
+        migrated[canonicalId] = { id:canonicalId, label, parent:canonicalParent || ROOT, aliases:uniq([...(old?.aliases || []), ...aliases]), learned:true };
+    }
+
+    for (const rec of Object.values(migrated)) {
+        if (rec.parent !== ROOT && !migrated[rec.parent]) {
+            const parts = rec.id.split('／');
+            rec.parent = parts.length > 1 ? parts.slice(0, -1).join('／') : ROOT;
+            changed = true;
+        }
+    }
+
+    store.learnedLocations = migrated;
+    store.version = MEMORY_VERSION;
+    if (changed) {
+        if (inst.discovered instanceof Set) inst.discovered = new Set([...inst.discovered].map(x => x === ROOT ? ROOT : canonicalizeStoredPath(x)));
+        if (inst.currentPos) inst.currentPos = canonicalizeStoredPath(inst.currentPos);
+        if (Array.isArray(inst.path)) inst.path = uniq(inst.path.map(x => x === ROOT ? ROOT : canonicalizeStoredPath(x)));
+        saveStore(inst);
+    }
+    return changed;
+}
+
 function ensureLearnedNode(inst, key, label, parentKey) {
     const store = inst.__mapNSceneStore ||= emptyStore(); store.learnedLocations ||= {};
-    store.learnedLocations[key] ||= { id:key, label, parent:parentKey || ROOT, aliases:[label], learned:true };
-    const rec = store.learnedLocations[key]; rec.label=label; rec.parent=parentKey||ROOT; rec.aliases=uniq([...(rec.aliases||[]),label]); return rec;
+    const cleanLabel = normalizeLocationParts(label).at(-1) || stripTimestampPrefix(label);
+    const cleanKey = canonicalizeStoredPath(key);
+    const cleanParent = parentKey && parentKey !== ROOT ? canonicalizeStoredPath(parentKey) : ROOT;
+    store.learnedLocations[cleanKey] ||= { id:cleanKey, label:cleanLabel, parent:cleanParent || ROOT, aliases:[cleanLabel], learned:true };
+    const rec = store.learnedLocations[cleanKey]; rec.id=cleanKey; rec.label=cleanLabel; rec.parent=cleanParent||ROOT; rec.aliases=uniq([...(rec.aliases||[]),cleanLabel]); return rec;
 }
 function mergeLearnedLocations(inst) {
+    migrateLearnedLocations(inst);
     const learned=(inst.__mapNSceneStore||emptyStore()).learnedLocations||{};
     for(const rec of Object.values(learned)){
         if(!inst.nodeMap[rec.id]) inst.nodeMap[rec.id]={id:rec.id,displayName:rec.label,aliases:rec.aliases||[rec.label],content:'剧情中确认的地点',type:'location',children:[],parent:rec.parent||ROOT,isWater:/海|河|湖|江|溪|潭|湾|岸|滩/.test(rec.label),isMountain:/山|峰|岭|崖|谷/.test(rec.label),learned:true};
@@ -34,7 +129,12 @@ function mergeLearnedLocations(inst) {
     }
     for(const rec of Object.values(learned)){ const p=rec.parent||ROOT; if(p===ROOT){inst.root.children||=[];if(!inst.root.children.includes(rec.id))inst.root.children.push(rec.id);} else if(inst.nodeMap[p]){const k=inst.nodeMap[p].children||=[];if(!k.includes(rec.id))k.push(rec.id);} }
 }
-function learnLocationChain(inst,parts,setCurrent=true){let parent=ROOT;for(let i=0;i<parts.length;i++){const key=locKey(parts,i);ensureLearnedNode(inst,key,parts[i],parent);parent=key;}mergeLearnedLocations(inst);saveStore(inst);const leaf=locKey(parts,parts.length-1);if(setCurrent){inst.currentPos=leaf;inst.path=inst.pathTo(leaf);}return leaf;}
+function learnLocationChain(inst,parts,setCurrent=true){
+    const cleanParts=(parts||[]).flatMap(x=>normalizeLocationParts(x));
+    if(!cleanParts.length)return null;
+    let parent=ROOT;for(let i=0;i<cleanParts.length;i++){const key=locKey(cleanParts,i);ensureLearnedNode(inst,key,cleanParts[i],parent);parent=key;}
+    mergeLearnedLocations(inst);saveStore(inst);const leaf=locKey(cleanParts,cleanParts.length-1);if(setCurrent){inst.currentPos=leaf;inst.path=inst.pathTo(leaf);}return leaf;
+}
 
 const INTENT_OR_REMOTE = /(?:准备|打算|计划|想(?:要)?|将要|要去|前往|赶往|去找|寻找|寻访|拜访|探望|看望|等待?|等候|听说|听闻|据说|传闻|提及|提起|谈及|谈起|说起|想到|想起|回忆|记得|梦见|担心|惦记|写信|传信|派人|托人|打听|询问.*下落)/;
 const PERCEPTION_OR_ACTION = /(?:说|道|问|答|喊|叫|笑|哭|看|瞥|盯|望|点头|摇头|皱眉|开口|伸手|抬手|拍|扶|拉|推|递|接|站|坐|蹲|跪|躺|靠|走来|过来|赶到|来到|进来|出现|凑近|靠近|上前|跟着|跟在|身旁|旁边|面前|身后|身边|眼前|怀里|屋里|院里|门口|桌旁|对面)/;
@@ -43,25 +143,24 @@ const ATTRIBUTE = '(?:穿着[^，。！？!?；;]{1,12}|身着[^，。！？!?�
 const SOCIAL_TITLE = '(?:公子|小姐|少爷|夫人|先生|大人|前辈|道友|真人|长老|堂主|舵主|管事|掌柜|老板|村长|族长|师父|师傅|师兄|师姐|师弟|师妹|师叔|师伯|师姑|师祖|郎中|医师|大夫|将军|校尉|捕头|船长|船主|少主|家主|宗主|门主|寨主|城主|护法|统领|队长|婶|叔|伯|爷|婆|姨|姑|嫂|哥|姐|弟|妹)';
 const GENERIC_TITLE_RE = new RegExp(`^${SOCIAL_TITLE}$`,'u');
 const DESC_RE = new RegExp(`^(?:${ATTRIBUTE}(?:的)?){1,2}${HUMAN_HEAD}$`,'u');
-const SPECIFIC_TITLE_RE = new RegExp(`^[\\p{Script=Han}]{1,2}${SOCIAL_TITLE}$`,'u');
 const NAME_RE = /^[\p{Script=Han}]{2,4}$/u;
 const LEADING_NOISE = /^(?:那位?|这位?|一名|一位|一个|那个|这个|旁边的|身旁的|对面的|门口的|身后的|眼前的)+/u;
 const TITLE_WORD_RE = new RegExp(SOCIAL_TITLE,'uy');
 const TITLE_PREFIX_RE = new RegExp(`^(?:${SOCIAL_TITLE})`,'u');
-const FAMILIAR_NAME_RE = /^老[\p{Script=Han}]{1,2}$/u;
+const INVALID_TITLE_PREFIX_RE = /(?:你|我|他|她|它|咱|让|叫|请|给|问|看|找|等|和|跟|同|把|被|对|向|从|在|到|去|来|又|再|先|后|这|那|其)/u;
+const RELATION_PERSON_RE = /(?:你|我|他|她|咱)(?:爷爷|奶奶|外公|外婆|父亲|母亲|爹|娘|爸爸|妈妈|哥哥|姐姐|弟弟|妹妹|叔叔|伯伯|婶婶|姑姑|姨妈|舅舅|师父|师傅)/gu;
+const BARE_NAME_BAD_RE = /^(?:我们|你们|他们|她们|自己|这里|那里|这边|那边|现在|随后|之后|一会|片刻|众人|大家|男人|女人|老人|老者|少年|少女|孩子|伙计|掌柜|老板|村长|师父|师傅)$/u;
+const BARE_NAME_EDGE_BAD_RE = /^(?:你|我|他|她|它|这|那|其|让|叫|请|给|问|看|找|等|和|跟|同|把|被|对|向|从|在|到|去|来)|(?:的|了|着|过|吗|呢|吧|啊|呀|得|地|让|叫|给|问|看|找|等|和|跟|同)$/u;
 
 function sentences(text){return String(text||'').split(/(?<=[。！？!?；;\n])/).map(x=>x.trim()).filter(Boolean);}
 function cleanCandidate(s){s=String(s||'').trim().replace(LEADING_NOISE,'').replace(/^[，。！？!?；;：“”‘’「」『』\s]+|[，。！？!?；;：“”‘’「」『』\s]+$/g,'');return s.length>=2&&s.length<=18?s:null;}
 function contextAround(s,name,left=18,right=20){const i=s.indexOf(name);return i<0?{left:'',right:''}:{left:s.slice(Math.max(0,i-left),i),right:s.slice(i+name.length,i+name.length+right)};}
 function isRemoteMention(s,name){const {left,right}=contextAround(s,name);return INTENT_OR_REMOTE.test(left)||/^(?:的家|家中|住处|那里|那边|下落)/.test(right);}
 function isObservable(s,name){if(isRemoteMention(s,name))return false;const {left,right}=contextAround(s,name);return PERCEPTION_OR_ACTION.test(left+right)||/(?:与|和|同|跟)\s*(?:你|我)|(?:你|我)\s*(?:身旁|身边|面前|对面)/.test(left+right);}
-function specificity(kind){return kind==='name'?4:kind==='specific-title'?3:kind==='description'?2:0;}
+function specificity(kind){return kind==='name'?4:kind==='relation'?3:kind==='specific-title'?3:kind==='description'?2:0;}
 function titleAt(text,index){TITLE_WORD_RE.lastIndex=index;const m=TITLE_WORD_RE.exec(text);return m?.[0]||null;}
 function overlapsRoleBoundary(text,start,end){
-    // Reject candidates that begin inside an immediately preceding role/title token.
-    // This prevents sequences such as [role][familiar-name] being re-cut as [surname][another-title].
     for(let back=1;back<=3&&start-back>=0;back++){const t=titleAt(text,start-back);if(t&&start-back+t.length>start)return true;}
-    // Reject a candidate whose leading Han component is itself a complete title and continues into another title.
     const raw=text.slice(start,end);for(let cut=1;cut<raw.length;cut++){if(GENERIC_TITLE_RE.test(raw.slice(0,cut))&&TITLE_PREFIX_RE.test(raw.slice(cut)))return true;}
     return false;
 }
@@ -70,23 +169,31 @@ function extractFamiliarNames(text){
     for(const m of String(text).matchAll(re)){const start=m.index||0;if(start>0&&/老/.test(text[start-1]))continue;out.push({name:m[0],kind:'specific-title',start});}
     return out;
 }
+function plausibleBareName(name){return NAME_RE.test(name)&&!BARE_NAME_BAD_RE.test(name)&&!BARE_NAME_EDGE_BAD_RE.test(name)&&!GENERIC_TITLE_RE.test(name);}
 
 function extractCandidates(inst,text){
-    const source=String(text);const out=[];const add=(raw,kind,start=-1)=>{const name=cleanCandidate(raw);if(!name||GENERIC_TITLE_RE.test(name))return;out.push({name,kind,start});};
+    const source=String(text);const out=[];const seen=new Set();
+    const add=(raw,kind,start=-1)=>{const name=cleanCandidate(raw);const key=`${name}\0${kind}\0${start}`;if(!name||GENERIC_TITLE_RE.test(name)||seen.has(key))return;seen.add(key);out.push({name,kind,start});};
     for(const id of inst.resolveMentions(source,'character')||[]){const n=inst.nodeMap[id];const aliases=n?.aliases||[id];for(const a of aliases)if(source.includes(a))add(a,'name',source.indexOf(a));}
     const descRe=new RegExp(`(?:那位?|这位?|一名|一位|一个)?((?:${ATTRIBUTE}(?:的)?){1,2}${HUMAN_HEAD})`,'gu');
     for(const m of source.matchAll(descRe))add(m[1],'description',m.index);
-    // First recognize colloquial person labels such as 老+姓; they often follow a separate role title.
     for(const c of extractFamiliarNames(source))add(c.name,c.kind,c.start);
-    // Parse title-bearing identities conservatively and reject matches crossing another role boundary.
+    for(const m of source.matchAll(RELATION_PERSON_RE))add(m[0],'relation',m.index||0);
+
     const titleRe=new RegExp(`(?:那位?|这位?)?([\\p{Script=Han}]{1,2}${SOCIAL_TITLE})`,'gu');
+    const titleSuffixRe=new RegExp(`${SOCIAL_TITLE}$`,'u');
     for(const m of source.matchAll(titleRe)){
         const raw=m[1];const rel=m[0].lastIndexOf(raw);const start=(m.index||0)+Math.max(0,rel);const end=start+raw.length;
-        if(overlapsRoleBoundary(source,start,end))continue;
+        const title=raw.match(titleSuffixRe)?.[0]||'';const prefix=title?raw.slice(0,-title.length):raw;
+        if(!prefix||INVALID_TITLE_PREFIX_RE.test(prefix)||overlapsRoleBoundary(source,start,end))continue;
         add(raw,'specific-title',start);
     }
+
     const nameRes=[/(?:名叫|叫作|叫做|唤作|姓名(?:是|为)?|自报名号(?:是|为)?|自报姓名(?:是|为)?|自称为?|姓甚名谁[^，。！？!?；;]{0,8}(?:答|道|说)?)[：:\s“「『]*([\p{Script=Han}]{2,4})/gu,/(?:此人|此女|此子|此老|他|她|其人)?\s*(?:正是|乃是)\s*([\p{Script=Han}]{2,4})(?=[，。！？!?；;：“”‘’「」『』\s])/gu];
-    for(const re of nameRes)for(const m of source.matchAll(re))if(NAME_RE.test(m[1]))add(m[1],'name',m.index);
+    for(const re of nameRes)for(const m of source.matchAll(re))if(plausibleBareName(m[1]))add(m[1],'name',m.index);
+
+    const bareSubjectRe=/(?:^|[。！？!?；;\n“”「『])\s*([\p{Script=Han}]{2,4})(?=(?:在|从|向|对|朝|正|又|便|则|却|也|已经|正在|低声|轻声|沉声|开口|说道|说|道|问|答|笑|哭|看|瞥|盯|望|点头|摇头|皱眉|伸手|抬手|拍|扶|拉|推|递|接|站|坐|蹲|跪|躺|靠|走来|过来|赶到|来到|进来|出现|凑近|靠近|上前|跟着|跟在))/gu;
+    for(const m of source.matchAll(bareSubjectRe))if(plausibleBareName(m[1]))add(m[1],'name',(m.index||0)+m[0].lastIndexOf(m[1]));
     return out;
 }
 
@@ -114,11 +221,11 @@ function displayName(inst,id){return inst.nodeMap[id]?.displayName||inst.nodeMap
 function patchDisplay(inst){if(inst.__mapNDisplayPatched)return;inst.__mapNDisplayPatched=true;const r=inst.render.bind(inst);inst.render=function(){r();const pos=this.container?.querySelector?.('#mapN-pos .hl');if(pos&&this.currentPos)pos.textContent=displayName(this,this.currentPos);const label=this.container?.querySelector?.('.mapN-characters .label');if(label)label.textContent='👤 在场人物：';};}
 
 async function install(){
-    for(let i=0;i<100&&!window.MapNInstance;i++)await wait(100);const inst=window.MapNInstance;if(!inst||inst.__sceneScanner112)return;inst.__sceneScanner112=true;
-    inst.__mapNSceneStore=loadStore(inst);mergeLearnedLocations(inst);patchDisplay(inst);
+    for(let i=0;i<100&&!window.MapNInstance;i++)await wait(100);const inst=window.MapNInstance;if(!inst||inst.__sceneScanner120)return;inst.__sceneScanner120=true;
+    inst.__mapNSceneStore=loadStore(inst);migrateLearnedLocations(inst);mergeLearnedLocations(inst);patchDisplay(inst);
     const build=inst.build.bind(inst);inst.build=function(entries){build(entries);mergeLearnedLocations(this);};
     const process=inst.process.bind(inst);inst.process=function(text,isUser=false){if(!text)return;const prev=[...(this.currentChars||[])];process(text,isUser);mergeLearnedLocations(this);if(isUser){this.currentChars=prev;this.save();return;}const chain=parseHeaderLocation(text);if(chain)learnLocationChain(this,chain,true);this.currentChars=resolveSceneEntities(this,text);this.currentChars.forEach(x=>this.encountered.add(x));this.save();if(this.container?.classList.contains('open'))this.render();};
     const chat=inst.ctx?.chat||[];let latestAI=null;for(const m of chat){if(!m?.mes||m.is_user)continue;const chain=parseHeaderLocation(String(m.mes));if(chain)learnLocationChain(inst,chain,false);latestAI=m;}if(latestAI?.mes){const chain=parseHeaderLocation(String(latestAI.mes));if(chain)learnLocationChain(inst,chain,true);inst.currentChars=resolveSceneEntities(inst,String(latestAI.mes));}
-    inst.save();inst.render();console.log('[Map-N] scene scanner v1.1.2 installed');
+    inst.save();inst.render();console.log('[Map-N] scene scanner v1.2.0 installed');
 }
 install();
