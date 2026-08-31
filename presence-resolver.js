@@ -1,8 +1,9 @@
-// Map-N presence resolver v1.0.0
+// Map-N presence resolver v1.1.0
 // Converts per-message visible-character candidates into an end-of-scene presence state.
 
 const presenceWait = ms => new Promise(r => setTimeout(r, ms));
 const presenceUniq = arr => [...new Set((arr || []).map(x => String(x).trim()).filter(Boolean))];
+const PRESENCE_VERSION = 2;
 
 const SCENE_MOVE_RE = /(?:你|你们|众人|几人|一行人|两人|三人|大家|他们|她们|一众人|一伙人)[^。！？!?；;\n]{0,20}(?:来到|抵达|到达|进入|走进|赶到|回到|返回|离开|出了|走出|进了|去了|赶往|前往|移步|转到|转入|抬到|扶到|送到|带到|搬到|移到)[^。！？!?；;\n]{0,24}/u;
 const SELF_MOVE_RE = /(?:你|我)[^。！？!?；;\n]{0,16}(?:来到|抵达|到达|进入|走进|赶到|回到|返回|离开|出了|走出|进了|去了|赶往|前往|移步|转到|转入)[^。！？!?；;\n]{0,24}/u;
@@ -14,14 +15,17 @@ const STAY_RE = /(?:留下|留在|仍在|还在|守在|站在|坐在|待在|等�
 const REMOTE_RE = /(?:准备|打算|计划|想要|要去|去找|寻找|拜访|探望|看望|听说|听闻|据说|提起|谈起|想起|回忆|打听|询问)/u;
 
 function presenceStoreKey(inst) { return `${inst.memoryKey}:presence-v1`; }
+function emptyPresence() { return { version:PRESENCE_VERSION, current:[], lastLocation:null }; }
 function loadPresence(inst) {
     try {
         const d = JSON.parse(localStorage.getItem(presenceStoreKey(inst)) || 'null');
-        return d && typeof d === 'object' ? d : { current: [], lastLocation: null };
-    } catch { return { current: [], lastLocation: null }; }
+        // v1 may contain false positives produced by the old person parser. Do not carry those
+        // across the parser upgrade; the latest AI message is re-evaluated immediately below.
+        return d && typeof d === 'object' && d.version === PRESENCE_VERSION ? d : emptyPresence();
+    } catch { return emptyPresence(); }
 }
 function savePresence(inst, state) {
-    try { localStorage.setItem(presenceStoreKey(inst), JSON.stringify(state)); } catch (e) { console.warn('[Map-N] 在场状态保存失败', e); }
+    try { state.version=PRESENCE_VERSION; localStorage.setItem(presenceStoreKey(inst), JSON.stringify(state)); } catch (e) { console.warn('[Map-N] 在场状态保存失败', e); }
 }
 
 function headerLocation(text) {
@@ -93,7 +97,6 @@ function resolvePresence(inst, text, rawCandidates) {
 
     let present = new Set(prev);
 
-    // A true scene move means old people do not automatically follow the player.
     if (transition >= 0) {
         const inherited = new Set();
         const transitionText = seg[transition]?.text || '';
@@ -102,17 +105,14 @@ function resolvePresence(inst, text, rawCandidates) {
         }
         present = inherited;
 
-        // Only candidates evidenced at/after the new scene survive the transition.
         for (const name of raw) {
             const last = lastMentionIndex(seg, name);
             if (last >= transition) present.add(name);
         }
     } else {
-        // Same scene: newly visible people join the persistent in-scene set.
         for (const name of raw) present.add(name);
     }
 
-    // Process explicit arrivals/stays and exits in narrative order so the last event wins.
     for (const part of seg) {
         const allNames = presenceUniq([...present, ...raw]);
         for (const name of allNames) {
@@ -122,7 +122,6 @@ function resolvePresence(inst, text, rawCandidates) {
         }
     }
 
-    // If a candidate was only mentioned before a transition and had no accompaniment evidence, keep it out.
     if (transition >= 0) {
         for (const name of [...present]) {
             const last = lastMentionIndex(seg, name);
@@ -130,6 +129,7 @@ function resolvePresence(inst, text, rawCandidates) {
         }
     }
 
+    state.version = PRESENCE_VERSION;
     state.current = presenceUniq([...present]).slice(0, 12);
     if (loc) state.lastLocation = loc;
     savePresence(inst, state);
@@ -137,19 +137,18 @@ function resolvePresence(inst, text, rawCandidates) {
 }
 
 function resetPresence(inst) {
-    inst.__mapNPresenceState = { current: [], lastLocation: null };
+    inst.__mapNPresenceState = emptyPresence();
     savePresence(inst, inst.__mapNPresenceState);
 }
 
 async function installPresenceResolver() {
     for (let i = 0; i < 120 && !window.MapNInstance; i++) await presenceWait(100);
     const inst = window.MapNInstance;
-    if (!inst || inst.__mapNPresenceResolver) return;
+    if (!inst || inst.__mapNPresenceResolver110) return;
 
-    // Wait until scene-scanner has wrapped process; we need its candidate result first.
-    for (let i = 0; i < 80 && !inst.__sceneScanner112; i++) await presenceWait(100);
-    if (inst.__mapNPresenceResolver) return;
-    inst.__mapNPresenceResolver = true;
+    for (let i = 0; i < 80 && !inst.__sceneScanner120; i++) await presenceWait(100);
+    if (inst.__mapNPresenceResolver110) return;
+    inst.__mapNPresenceResolver110 = true;
     inst.__mapNPresenceState = loadPresence(inst);
 
     const previousProcess = inst.process.bind(inst);
@@ -167,7 +166,6 @@ async function installPresenceResolver() {
         if (this.container?.classList.contains('open')) this.render();
     };
 
-    // Re-evaluate the latest AI message immediately, so installing the update fixes the visible state without waiting another turn.
     const chat = inst.ctx?.chat || [];
     let latest = null;
     for (let i = chat.length - 1; i >= 0; i--) {
@@ -180,7 +178,6 @@ async function installPresenceResolver() {
         inst.render();
     }
 
-    // Chat switches should not leak a scene state between chats.
     const es = inst.ctx?.eventSource;
     const et = inst.ctx?.eventTypes || inst.ctx?.event_types;
     if (es && et) {
@@ -189,7 +186,7 @@ async function installPresenceResolver() {
         if (et.CHARACTER_SELECTED) es.on(et.CHARACTER_SELECTED, clear);
     }
 
-    console.log('[Map-N] presence resolver v1.0.0 installed');
+    console.log('[Map-N] presence resolver v1.1.0 installed');
 }
 
 installPresenceResolver();
