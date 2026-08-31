@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+const url=new URL('../entity-core.js',import.meta.url);const source=fs.readFileSync(url,'utf8');const core=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const same=(actual,expected,name)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw new Error(`${name}: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`)};
+const setSame=(actual,expected,name)=>same([...actual].sort(),[...expected].sort(),name);
+same(core.normalizeLocationParts('08:00 | 沉陆'),['沉陆'],'timestamp stripped');
+same(core.normalizeLocationParts('08:30 | 沉陆 · 石峪 · 石峪西侧旧谷道（老鹰崖塌方石堆北缘）'),['沉陆','石峪','石峪西侧旧谷道'],'parenthetical qualifier stripped');
+same(core.parseHeaderLocation('【08:30 | 沉陆 · 石峪 · 石峪西侧旧谷道（旧墙墙根洞口旁）】\n正文'),['沉陆','石峪','石峪西侧旧谷道'],'header hierarchy');
+if(!(core.parentScore('石峪西侧旧谷道','石峪')>0))throw new Error('峪 should parent compound 谷道');
+if(!(core.parentScore('石峪西侧旧谷道北段','石峪西侧旧谷道')>core.parentScore('石峪西侧旧谷道北段','石峪')))throw new Error('longest semantic parent should win');
+setSame(core.extractPeople('霍三在旁边低声道：“陈望，先让你爷爷歇会儿。”'),['霍三','你爷爷'],'subject + controlled relation person');
+setSame(core.extractPeople('陈望摆了摆手，又看向你：“等伤药。”'),['陈望'],'subject boundary');
+setSame(core.extractPeople('霍三和陈望回村。'),['霍三','陈望'],'coordinated subjects');
+setSame(core.extractPeople('让霍三陪你去一趟。'),['霍三'],'controlled object person');
+setSame(core.extractPeople('石峪西侧旧谷道北段边缘有风。'),[],'place must not become person');
+setSame(core.extractPeople('拐过沟以后，东西放在洞口。'),[],'verbs/nouns must not become people');
+console.log('Map-N entity regression: OK');
