@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.1",
-  "description":"认知舆图：编译统一地点图，合并同名世界书/剧情节点并在渲染前确定层级",
+  "version":"1.5.2",
+  "description":"认知舆图：修复层级重算覆盖用户导航状态导致的上级/世界/地点按钮失效",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
