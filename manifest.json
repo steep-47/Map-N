@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.2",
-  "description":"认知舆图：修复层级重算覆盖用户导航状态导致的上级/世界/地点按钮失效",
+  "version":"1.5.3",
+  "description":"认知舆图：按 SillyTavern 聊天文件独立存储地图，并在切换剧情时刷新上下文快照",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
