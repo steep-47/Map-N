@@ -1,10 +1,10 @@
-// Map-N scene scanner v1.2.0
+// Map-N scene scanner v1.2.1
 // Durable cognitive locations + conservative, role-based visible entity parsing.
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const uniq = arr => [...new Set((arr || []).map(x => String(x).trim()).filter(Boolean))];
 const ROOT = '世界舆图';
-const MEMORY_VERSION = 3;
+const MEMORY_VERSION = 4;
 
 function scopeStoreKey(inst) { return `${inst.memoryKey}:scene-v2`; }
 function emptyStore() { return { version: MEMORY_VERSION, learnedLocations: {}, knownCharacters: {} }; }
@@ -21,8 +21,6 @@ const BARE_TIME_PREFIX_RE = /^\s*(?:\d{1,2}:\d{2}(?::\d{2})?)\s*[|｜]\s*/u;
 
 function stripTimestampPrefix(value) {
     let s = String(value || '').trim();
-    // Strip only a timestamp/date-shaped field before a pipe. Arbitrary place names containing a
-    // pipe are deliberately left alone.
     for (let i = 0; i < 2; i++) {
         const next = s.replace(TIME_PREFIX_RE, '').replace(BARE_TIME_PREFIX_RE, '').trim();
         if (next === s) break;
@@ -31,12 +29,21 @@ function stripTimestampPrefix(value) {
     return s;
 }
 
+function stripTrailingQualifier(value) {
+    const s = String(value || '').trim();
+    const m = s.match(/[（(]/u);
+    if (!m || m.index == null || m.index < 2) return s;
+    // Parenthetical text in generated status headers is a local landmark/position qualifier,
+    // not part of the canonical place name. Treat complete and truncated parentheses alike.
+    return s.slice(0, m.index).trim();
+}
+
 function normalizeLocationParts(raw) {
     const source = stripTimestampPrefix(String(raw || '').replace(/^(?:【|\[)\s*|\s*(?:】|\])$/g, ''));
     if (!source) return [];
     return source
         .split(/\s*[·•›>→/／]+\s*/)
-        .map(x => stripTimestampPrefix(x).trim())
+        .map(x => stripTrailingQualifier(stripTimestampPrefix(x)).trim())
         .filter(x => x.length >= 2 && x.length <= 30 && !/^\d{1,2}:\d{2}(?::\d{2})?$/.test(x));
 }
 
@@ -44,7 +51,6 @@ function parseHeaderLocation(text) {
     const head = String(text || '').split(/\n/).slice(0, 8).join('\n');
     const lines = head.split(/\n/).map(x => x.trim()).filter(Boolean);
 
-    // Preferred form: 【08:00 | 沉陆】 / [2026-08-31 08:00 | 沉陆]
     for (const line of lines) {
         const bracket = line.match(/[【[]\s*([^】\]\n]+)\s*[】\]]/u);
         if (!bracket) continue;
@@ -54,7 +60,6 @@ function parseHeaderLocation(text) {
         if (parts.length) return parts;
     }
 
-    // Also accept a bare status line such as "08:00 | 沉陆", but only near the message header.
     for (const line of lines) {
         if (!TIME_PREFIX_RE.test(line) && !BARE_TIME_PREFIX_RE.test(line)) continue;
         const parts = normalizeLocationParts(line);
@@ -113,7 +118,7 @@ function migrateLearnedLocations(inst) {
 
 function ensureLearnedNode(inst, key, label, parentKey) {
     const store = inst.__mapNSceneStore ||= emptyStore(); store.learnedLocations ||= {};
-    const cleanLabel = normalizeLocationParts(label).at(-1) || stripTimestampPrefix(label);
+    const cleanLabel = normalizeLocationParts(label).at(-1) || stripTrailingQualifier(stripTimestampPrefix(label));
     const cleanKey = canonicalizeStoredPath(key);
     const cleanParent = parentKey && parentKey !== ROOT ? canonicalizeStoredPath(parentKey) : ROOT;
     store.learnedLocations[cleanKey] ||= { id:cleanKey, label:cleanLabel, parent:cleanParent || ROOT, aliases:[cleanLabel], learned:true };
@@ -221,11 +226,11 @@ function displayName(inst,id){return inst.nodeMap[id]?.displayName||inst.nodeMap
 function patchDisplay(inst){if(inst.__mapNDisplayPatched)return;inst.__mapNDisplayPatched=true;const r=inst.render.bind(inst);inst.render=function(){r();const pos=this.container?.querySelector?.('#mapN-pos .hl');if(pos&&this.currentPos)pos.textContent=displayName(this,this.currentPos);const label=this.container?.querySelector?.('.mapN-characters .label');if(label)label.textContent='👤 在场人物：';};}
 
 async function install(){
-    for(let i=0;i<100&&!window.MapNInstance;i++)await wait(100);const inst=window.MapNInstance;if(!inst||inst.__sceneScanner120)return;inst.__sceneScanner120=true;
+    for(let i=0;i<100&&!window.MapNInstance;i++)await wait(100);const inst=window.MapNInstance;if(!inst||inst.__sceneScanner121)return;inst.__sceneScanner121=true;
     inst.__mapNSceneStore=loadStore(inst);migrateLearnedLocations(inst);mergeLearnedLocations(inst);patchDisplay(inst);
     const build=inst.build.bind(inst);inst.build=function(entries){build(entries);mergeLearnedLocations(this);};
     const process=inst.process.bind(inst);inst.process=function(text,isUser=false){if(!text)return;const prev=[...(this.currentChars||[])];process(text,isUser);mergeLearnedLocations(this);if(isUser){this.currentChars=prev;this.save();return;}const chain=parseHeaderLocation(text);if(chain)learnLocationChain(this,chain,true);this.currentChars=resolveSceneEntities(this,text);this.currentChars.forEach(x=>this.encountered.add(x));this.save();if(this.container?.classList.contains('open'))this.render();};
     const chat=inst.ctx?.chat||[];let latestAI=null;for(const m of chat){if(!m?.mes||m.is_user)continue;const chain=parseHeaderLocation(String(m.mes));if(chain)learnLocationChain(inst,chain,false);latestAI=m;}if(latestAI?.mes){const chain=parseHeaderLocation(String(latestAI.mes));if(chain)learnLocationChain(inst,chain,true);inst.currentChars=resolveSceneEntities(inst,String(latestAI.mes));}
-    inst.save();inst.render();console.log('[Map-N] scene scanner v1.2.0 installed');
+    inst.save();inst.render();console.log('[Map-N] scene scanner v1.2.1 installed');
 }
 install();
