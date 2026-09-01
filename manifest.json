@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.6",
-  "description":"认知舆图：显示层按当前父地点生成相对短名，完整地名保留在数据层并支持悬停查看",
+  "version":"1.5.7",
+  "description":"认知舆图：相对短名扩展到地图卡片、底部导航、面包屑和当前层标题，完整地名仍保留在数据层",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
