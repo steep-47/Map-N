@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.7",
-  "description":"认知舆图：相对短名扩展到地图卡片、底部导航、面包屑和当前层标题，完整地名仍保留在数据层",
+  "version":"1.5.8",
+  "description":"认知舆图：面包屑始终按真实父子层级逐级显示，层级重算后自动修复旧路径并保留当前浏览节点",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
