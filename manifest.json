@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.6.0",
-  "description":"认知舆图：改用 SillyTavern chat + swipe 作为唯一剧情时间线；地图状态写入当前消息分支，并以检查点+增量恢复当前地图，删除独立回溯按钮与第二套回溯账本",
+  "version":"1.6.1",
+  "description":"认知舆图：以 SillyTavern chat + swipe 作为唯一剧情时间线；地图状态写入当前消息分支，并以检查点+增量恢复，自动同步删除/编辑/重生成，同时保持用户当前地图浏览路径独立",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
