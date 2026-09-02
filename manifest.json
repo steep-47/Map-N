@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.30",
-  "description":"认知舆图：为世界书地点的已发现状态增加消息来源记录；重新生成、编辑或删除对话时撤销失效分支贡献，避免多次重生成把不同分支提到的地点不断累积到地图",
+  "version":"1.5.31",
+  "description":"认知舆图：回溯与重扫改为按语义证据重建地图；普通正文仅提及世界书地点不再视为已发现，明确场景头或实际到达/停留才建立发现来源，并在回溯前刷新当前聊天上下文",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
