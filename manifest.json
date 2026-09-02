@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.15",
-  "description":"认知舆图：默认聊天重扫窗口由200层缩减为最近50层；历史地图继续持久化，仅限制刷新、回溯与即时状态重算的原文扫描范围",
+  "version":"1.5.16",
+  "description":"认知舆图：继续使用最近50层扫描窗口，并修复切换聊天时场景地点、在场人物和旧节点图缓存可能沿用上一聊天的问题",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
