@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.27",
-  "description":"认知舆图：回溯扫描时显式携带每条消息的真实索引，避免内容重复的消息被错误归到最后一条同文消息，从而保证地点来源与回滚定位准确",
+  "version":"1.5.28",
+  "description":"认知舆图：修复来源回滚只删除持久记录、却未同步清除运行中地图节点的问题；回滚后立即重建当前地图图结构，并避免恢复已经失效的浏览路径",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
