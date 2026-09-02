@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.6.3",
-  "description":"认知舆图：以 SillyTavern chat + swipe 作为唯一剧情时间线；完整地点/人物推导链就绪后才建立时间线状态，避免初始化过早产生空地图快照",
+  "version":"1.6.4",
+  "description":"认知舆图：时间线重放显式执行场景头地点推导，不再依赖模块包装安装时序；旧派生状态自动失效并重建",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
