@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.28",
-  "description":"认知舆图：修复来源回滚只删除持久记录、却未同步清除运行中地图节点的问题；回滚后立即重建当前地图图结构，并避免恢复已经失效的浏览路径",
+  "version":"1.5.29",
+  "description":"认知舆图：补齐 SillyTavern 的 MESSAGE_EDITED 事件监听，使手动编辑消息也会进入与重新生成、更新、删除相同的来源回滚与重扫流程",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
