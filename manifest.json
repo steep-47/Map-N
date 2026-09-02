@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.10",
-  "description":"认知舆图：检查并修复长剧情性能与历史记忆保护；层级图未变化时不再重复二次方重算，自动近窗重扫不再清空旧地图",
+  "version":"1.5.11",
+  "description":"认知舆图：二次检查长剧情性能与变更一致性；启动辅助扫描统一受200层窗口限制，层级签名改为内容敏感，近窗变更会重算当前位置与在场人物但保留历史地图",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
