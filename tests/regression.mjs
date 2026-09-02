@@ -7,6 +7,12 @@ same(core.normalizeLocationParts('08:30 | 沉陆 · 石峪 · 石峪西侧旧谷
 same(core.parseHeaderLocation('【08:30 | 沉陆 · 石峪 · 石峪西侧旧谷道（旧墙墙根洞口旁）】\n正文'),['沉陆','石峪','石峪西侧旧谷道'],'header hierarchy');
 same(core.parseHeaderLocation('12500年01月01日 08:00\n地点：云陆·青梧国·临川府·白石县·柳溪村\n柳溪村坐落在两道缓坡之间。'),['云陆','青梧国','临川府','白石县','柳溪村'],'explicit location label hierarchy');
 same(core.parseHeaderLocation('时间：08:00\n当前位置: 云陆 / 青梧国 / 临川府 / 白石县 / 柳溪村\n正文'),['云陆','青梧国','临川府','白石县','柳溪村'],'current location label slash hierarchy');
+same(core.parseHeaderLocation('### 位置｜云陆 › 青梧国 › 临川府 › 白石县 › 柳溪村\n正文'),['云陆','青梧国','临川府','白石县','柳溪村'],'markdown metadata and alternate separator');
+same(core.parseHeaderLocation('📍 云陆／青梧国／临川府／白石县／柳溪村\n正文'),['云陆','青梧国','临川府','白石县','柳溪村'],'pin metadata hierarchy');
+same(core.parseHeaderLocation('12500年01月01日 08:00\n云陆 → 青梧国 → 临川府 → 白石县 → 柳溪村\n正文'),['云陆','青梧国','临川府','白石县','柳溪村'],'time-adjacent unlabeled hierarchy');
+same(core.parseHeaderLocation('时间：08:00\n柳溪村\n正文'),['柳溪村'],'time-adjacent single recognizable place');
+same(core.parseHeaderLocation('场景：冬夜归乡\n他准备前往白石县·柳溪村。'),null,'scene title must not become location');
+same(core.parseHeaderLocation('他准备前往白石县·柳溪村。\n正文继续。'),null,'narrative destination must not become current location');
 if(!(core.parentScore('石峪西侧旧谷道','石峪')>0))throw new Error('峪 should parent compound 谷道');
 if(!(core.parentScore('石峪西侧旧谷道北段','石峪西侧旧谷道')>core.parentScore('石峪西侧旧谷道北段','石峪')))throw new Error('longest semantic parent should win');
 if(!(core.hierarchyRelationScore('石峪西侧旧谷道','石峪')>core.hierarchyRelationScore('石峪西侧旧谷道','沉陆',{explicit:true})))throw new Error('immediate semantic parent must beat broad explicit ancestor');
