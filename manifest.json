@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.33",
-  "description":"认知舆图：修复明确当前地点位于回复中后段时因只扫描前16行而漏识别的问题；强地点标签现在可在整条回复中识别，普通弱格式仍保持前部元数据区限制",
+  "version":"1.5.23",
+  "description":"认知舆图：场景头地点解析改为格式宽容、语义严格；支持地点/位置字段、图钉、Markdown、时间邻接地点链等多种随机表现，同时避免把正文目的地当当前位置",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
