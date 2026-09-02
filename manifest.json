@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.6.4",
-  "description":"认知舆图：时间线重放显式执行场景头地点推导，不再依赖模块包装安装时序；旧派生状态自动失效并重建",
+  "version":"1.5.23",
+  "description":"认知舆图：场景头地点解析改为格式宽容、语义严格；支持地点/位置字段、图钉、Markdown、时间邻接地点链等多种随机表现，同时避免把正文目的地当当前位置",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
