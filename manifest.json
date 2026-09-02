@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.26",
-  "description":"认知舆图：修复重新生成/编辑时新快照可能先于回滚检查写入、导致变化被误判为已同步的问题；连续变更也会排队完成回滚",
+  "version":"1.5.27",
+  "description":"认知舆图：回溯扫描时显式携带每条消息的真实索引，避免内容重复的消息被错误归到最后一条同文消息，从而保证地点来源与回滚定位准确",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
