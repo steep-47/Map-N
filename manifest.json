@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.21",
-  "description":"认知舆图：修复刷新遮罩会被地图重绘清掉的问题；刷新时由地图区域自身持续显示转圈与提示，完成后再消失",
+  "version":"1.5.22",
+  "description":"认知舆图：场景头除时间竖线格式外，也识别“地点/位置/所在地/当前地点”等显式地点字段及其多级路径",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
