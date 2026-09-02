@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.20",
-  "description":"认知舆图：刷新按钮保持静止；刷新世界书与最近50层地图数据时，在地图内容区域显示转圈加载遮罩，完成后自动消失",
+  "version":"1.5.21",
+  "description":"认知舆图：修复刷新遮罩会被地图重绘清掉的问题；刷新时由地图区域自身持续显示转圈与提示，完成后再消失",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
