@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.9",
-  "description":"认知舆图：自动刷新、回溯与变更检测只重扫最近200层对话，保留已持久化地图记忆以避免长剧情性能持续下降",
+  "version":"1.5.10",
+  "description":"认知舆图：检查并修复长剧情性能与历史记忆保护；层级图未变化时不再重复二次方重算，自动近窗重扫不再清空旧地图",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
