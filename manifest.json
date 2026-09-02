@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.14",
-  "description":"认知舆图：第四轮性能检查，200层批量重扫期间将主地图、场景地点与在场人物的持久化写入统一延后到批次结束，避免逐消息重复序列化和localStorage写入",
+  "version":"1.5.15",
+  "description":"认知舆图：默认聊天重扫窗口由200层缩减为最近50层；历史地图继续持久化，仅限制刷新、回溯与即时状态重算的原文扫描范围",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
