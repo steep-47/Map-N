@@ -1,4 +1,4 @@
-// Map-N history window v1.0.5
+// Map-N history window v1.0.4
 // Performance policy: persistent map memory may accumulate, but automatic text re-scans only inspect a recent chat window.
 const DEFAULT_LIMIT=50;
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -20,15 +20,15 @@ globalThis.MapNHistoryScanLimit=globalThis.MapNHistoryScanLimit||DEFAULT_LIMIT;
 globalThis.MapNHistoryWindow={limit,slice,range,batch};
 async function install(){
   for(let i=0;i<160&&!window.MapNInstance;i++)await wait(25);
-  const inst=window.MapNInstance;if(!inst||inst.__historyWindow105)return;inst.__historyWindow105=true;inst.historyScanLimit=limit();
+  const inst=window.MapNInstance;if(!inst||inst.__historyWindow104)return;inst.__historyWindow104=true;inst.historyScanLimit=limit();
   // Base Map-N calls save() for every processed message. During a bounded rebuild this used to serialize
   // the whole accumulated memory repeatedly. Keep mutations in memory and persist once at batch end.
   const rawSave=inst.save.bind(inst);
   inst.save=function(){if((this.__mapNBatchDepth||0)>0){this.__mapNMainSaveDirty=true;return;}return rawSave();};
   const priorFlush=inst.__mapNFlushBatch?.bind(inst);
   inst.__mapNFlushBatch=function(){priorFlush?.();if(this.__mapNMainSaveDirty){this.__mapNMainSaveDirty=false;rawSave();}};
-  inst.scanChat=function(){const fresh=window.SillyTavern?.getContext?.();if(fresh)this.ctx=fresh;const chat=this.ctx?.chat||[],r=range(chat);batch(this,()=>{for(let i=r.start;i<r.end;i++){const m=chat[i];if(!m?.mes)continue;this.__mapNSourceIndex=i;try{this.process(String(m.mes),!!m.is_user)}finally{this.__mapNSourceIndex=null}}});this.__mapNLastHistoryScan=r;return r;};
-  console.log(`[Map-N] history window v1.0.5 installed: recent ${limit()} floors`);
+  inst.scanChat=function(){const fresh=window.SillyTavern?.getContext?.();if(fresh)this.ctx=fresh;const chat=this.ctx?.chat||[],r=range(chat);batch(this,()=>{for(let i=r.start;i<r.end;i++){const m=chat[i];if(m?.mes)this.process(String(m.mes),!!m.is_user);}});this.__mapNLastHistoryScan=r;return r;};
+  console.log(`[Map-N] history window v1.0.4 installed: recent ${limit()} floors`);
 }
 install();
 export {limit,slice,range,batch};
