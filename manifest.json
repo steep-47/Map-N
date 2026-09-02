@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.17",
-  "description":"认知舆图：继续使用最近50层扫描窗口；场景头增量学习时只合并当前路径涉及的地点记录，不再每条消息遍历全部历史学习地点",
+  "version":"1.5.18",
+  "description":"认知舆图：最近50层扫描与增量学习保持不变；刷新按钮在重新读取世界书和重扫期间显示旋转加载提示，完成后自动恢复",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
