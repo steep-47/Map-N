@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.8",
-  "description":"认知舆图：面包屑始终按真实父子层级逐级显示，层级重算后自动修复旧路径并保留当前浏览节点",
+  "version":"1.5.9",
+  "description":"认知舆图：自动刷新、回溯与变更检测只重扫最近200层对话，保留已持久化地图记忆以避免长剧情性能持续下降",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
