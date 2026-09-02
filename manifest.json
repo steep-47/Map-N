@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.19",
-  "description":"认知舆图：刷新时旋转刷新图标，并保证最短可见时长；最近50层扫描与增量学习保持不变",
+  "version":"1.5.20",
+  "description":"认知舆图：刷新按钮保持静止；刷新世界书与最近50层地图数据时，在地图内容区域显示转圈加载遮罩，完成后自动消失",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
