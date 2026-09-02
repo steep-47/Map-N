@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.13",
-  "description":"认知舆图：第三轮性能检查，批量重扫期间延后层级签名与时间线哈希到批次结束，并减少重复场景存储写入",
+  "version":"1.5.14",
+  "description":"认知舆图：第四轮性能检查，200层批量重扫期间将主地图、场景地点与在场人物的持久化写入统一延后到批次结束，避免逐消息重复序列化和localStorage写入",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
