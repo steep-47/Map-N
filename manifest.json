@@ -6,8 +6,8 @@
   "js":"index.js",
   "css":"Map-N.css",
   "author":"Map-N",
-  "version":"1.5.16",
-  "description":"认知舆图：继续使用最近50层扫描窗口，并修复切换聊天时场景地点、在场人物和旧节点图缓存可能沿用上一聊天的问题",
+  "version":"1.5.17",
+  "description":"认知舆图：继续使用最近50层扫描窗口；场景头增量学习时只合并当前路径涉及的地点记录，不再每条消息遍历全部历史学习地点",
   "homePage":"https://github.com/steep-47/Map-N",
   "auto_update":true
 }
