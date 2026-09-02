@@ -1,7 +1,8 @@
-// Map-N entity core v2.1.1
+// Map-N entity core v2.1.2
 // Single source of truth for location canonicalization, hierarchy ranking and conservative person parsing.
 const TIME_PREFIX_RE=/^\s*(?:(?:\d{1,6}年\d{1,2}月\d{1,2}日)|(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(?:\d{1,2}月\d{1,2}日))?(?:\s*(?:周[一二三四五六日天]|星期[一二三四五六日天]))?(?:\s*(?:上午|下午|晚上|夜间|凌晨|清晨|早上|中午|傍晚))?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*[|｜]\s*/u;
 const BARE_TIME_PREFIX_RE=/^\s*\d{1,2}:\d{2}(?::\d{2})?\s*[|｜]\s*/u;
+const LOCATION_LABEL_RE=/^\s*(?:地点|位置|所在地|场景地点|当前地点|Location)\s*[：:]\s*(.+?)\s*$/iu;
 const CONTAINER_SUFFIX_RE=/(?:国|州|郡|府|县|城|镇|村|寨|庄|岛|海|湾|湖|河|江|山|岭|峪|谷|峡|沟|原|林|泽)$/u;
 const ROUTE_SUFFIX_RE=/(?:谷道|山道|官道|古道|栈道|小道|道路|路|径)$/u;
 const LOCAL_DETAIL_SUFFIX_RE=/(?:墙根|洞口|门口|路口|谷口|沟口|村口|镇口|城门|崖根|树下|屋里|屋内|院里|院内|旁|旁边|边缘|北缘|南缘|东缘|西缘)$/u;
@@ -21,11 +22,9 @@ function stripParentheticalQualifier(s){const v=String(s||'').trim(),i=v.search(
 function stripDanglingCloser(s){let v=String(s||'').trim();while(/[）)]$/u.test(v)){const o=(v.match(/[（(]/gu)||[]).length,c=(v.match(/[）)]/gu)||[]).length;if(c<=o)break;v=v.slice(0,-1).trim();}return v;}
 function normalizeLocationSegment(s){return stripDanglingCloser(stripParentheticalQualifier(stripTimestampPrefix(stripOuterBrackets(s)))).replace(/^[,，;；:：\s]+|[,，;；:：\s]+$/gu,'').trim();}
 function normalizeLocationParts(raw){const src=stripTimestampPrefix(stripOuterBrackets(raw));if(!src)return[];return src.split(/\s*[·•›>→/／]+\s*/u).map(normalizeLocationSegment).filter(x=>x.length>=2&&x.length<=40&&!/^\d{1,2}:\d{2}(?::\d{2})?$/u.test(x));}
-function parseHeaderLocation(text){const lines=String(text||'').split(/\n/).slice(0,10).map(x=>x.trim()).filter(Boolean);for(const line of lines){const m=line.match(/[【[]\s*([^】\]\n]+)\s*[】\]]/u);if(m&&(TIME_PREFIX_RE.test(m[1])||BARE_TIME_PREFIX_RE.test(m[1]))){const p=normalizeLocationParts(m[1]);if(p.length)return p;}}for(const line of lines){if(TIME_PREFIX_RE.test(line)||BARE_TIME_PREFIX_RE.test(line)){const p=normalizeLocationParts(line);if(p.length)return p;}}return null;}
+function parseHeaderLocation(text){const lines=String(text||'').split(/\n/).slice(0,12).map(x=>x.trim()).filter(Boolean);for(const line of lines){const m=line.match(LOCATION_LABEL_RE);if(m){const p=normalizeLocationParts(m[1]);if(p.length)return p;}}for(const line of lines){const m=line.match(/[【[]\s*([^】\]\n]+)\s*[】\]]/u);if(m&&(TIME_PREFIX_RE.test(m[1])||BARE_TIME_PREFIX_RE.test(m[1]))){const p=normalizeLocationParts(m[1]);if(p.length)return p;}}for(const line of lines){if(TIME_PREFIX_RE.test(line)||BARE_TIME_PREFIX_RE.test(line)){const p=normalizeLocationParts(line);if(p.length)return p;}}return null;}
 function placeKind(name){const s=normalizeLocationSegment(name);if(LOCAL_DETAIL_SUFFIX_RE.test(s))return'local-detail';if(ROUTE_SUFFIX_RE.test(s))return'route';if(/(?:段|缘)$/u.test(s))return'segment';if(CONTAINER_SUFFIX_RE.test(s))return'container';if(PLACE_SUFFIX_RE.test(s))return'place';return'unknown';}
 function parentScore(child,parent){const c=normalizeLocationSegment(child),p=normalizeLocationSegment(parent);if(!c||!p||c===p||c.length<=p.length||!c.startsWith(p))return 0;const ck=placeKind(c),pk=placeKind(p),tail=c.slice(p.length);let score=40+p.length;if(DIR_PREFIX_RE.test(tail))score+=12;if(pk==='container'&&['route','segment','local-detail','place'].includes(ck))score+=18;if(pk==='route'&&['segment','local-detail'].includes(ck))score+=22;return score;}
-// Scene headers often omit intermediate geography. Therefore an encoded header path proves ancestry,
-// not direct parentage. A more specific semantic compound parent must win when available.
 function hierarchyRelationScore(child,parent,{explicit=false,pathDepth=0}={}){const semantic=parentScore(child,parent);if(semantic>0)return 3000+semantic+normalizeLocationSegment(parent).length*4;if(pathDepth>0)return 2000+pathDepth*10+String(parent||'').length;return explicit?1000+normalizeLocationSegment(parent).length:0;}
 function surnameLengthAt(src,i){for(const s of SURNAME_2)if(src.startsWith(s,i))return 2;return SURNAME_1.has(src[i])?1:0;}
 function actionAt(rest){let r=String(rest||'').replace(/^\s+/u,'');for(const a of ADVERBS)if(r.startsWith(a)){r=r.slice(a.length).replace(/^\s+/u,'');break;}for(const a of ACTIONS)if(r.startsWith(a))return a;return null;}
