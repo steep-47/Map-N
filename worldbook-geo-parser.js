@@ -1,4 +1,4 @@
-// Map-N worldbook geography parser v2.0.0
+// Map-N worldbook geography parser v2.0.1
 // Keep Map-N's original live engine; only compile worldbook geography into safe named-location entries.
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const uniq=a=>[...new Set((a||[]).filter(Boolean))];
@@ -9,12 +9,8 @@ function text(e){return String(e?.content||'').replace(/\s+/gu,' ').trim()}
 function comment(e){return String(e?.comment||'').trim()}
 function subjectNames(e){
   const ks=entryKeys(e),cm=comment(e),t=text(e),out=[];
-  // Normal named entries: the entry title/comment names the subject itself.
   if(ks.includes(cm)&&GEO_SUFFIX.test(cm))out.push(cm);
-  // Overview/list entries may declare their listed names as actual proper place names.
-  if(/(?:固有地名|正式地名|地名)[^。；;]{0,20}(?:板块|区域|地点)?/u.test(t)||/(?:板块|区域)[^。；;]{0,20}(?:构成|组成)[^。；;]{0,40}(?:固有地名|地名)/u.test(t)){
-    for(const k of ks)if(GEO_SUFFIX.test(k))out.push(k);
-  }
+  if(/(?:固有地名|正式地名)/u.test(t)&&/(?:板块|区域|地点|地域)/u.test(t))for(const k of ks)if(GEO_SUFFIX.test(k))out.push(k);
   return uniq(out);
 }
 function collect(entries){const out=[];for(const e of entries)for(const n of subjectNames(e))if(!out.includes(n))out.push(n);return out}
@@ -33,7 +29,6 @@ function relationScore(child,parent,entries){
 function directParents(names,entries){
   const candidates=new Map();
   for(const c of names){const a=[];for(const p of names){if(c===p)continue;const score=relationScore(c,p,entries);if(score)a.push({parent:p,score})}candidates.set(c,a)}
-  // If one candidate parent is itself below another candidate parent, prefer the nearer descendant.
   const reaches=(from,target,seen=new Set())=>{if(from===target)return true;if(seen.has(from))return false;seen.add(from);for(const x of candidates.get(from)||[])if(reaches(x.parent,target,seen))return true;return false};
   const out=new Map();
   for(const c of names){let a=[...(candidates.get(c)||[])];if(!a.length)continue;a=a.filter(x=>!a.some(y=>y!==x&&reaches(y.parent,x.parent)));a.sort((x,y)=>y.score-x.score||y.parent.length-x.parent.length);if(a[0])out.set(c,a[0].parent)}
@@ -47,17 +42,16 @@ function compile(entries){
 }
 async function install(){
   for(let n=0;n<180&&!window.MapNInstance;n++)await wait(50);
-  const i=window.MapNInstance;if(!i||i.__worldbookGeoParser200)return;i.__worldbookGeoParser200=true;
+  const i=window.MapNInstance;if(!i||i.__worldbookGeoParser201)return;i.__worldbookGeoParser201=true;
   const original=i.build.bind(i);
   i.build=function(entries){
     const raw=Array.isArray(entries)?entries:[];
     const geo=compile(raw);
-    // Preserve only entries the original engine itself identifies as characters. Other non-geographic worldbook entries are evidence, not map nodes.
     const chars=raw.filter(e=>{const ks=this.entryKeys?.(e)||entryKeys(e);return ks.length&&this.classify?.(ks[0],String(e?.content||''))==='character'});
     this.__mapNRawWorldEntries=raw;this.__mapNGeoEntries=geo;
     return original([...chars,...geo]);
   };
   if(Array.isArray(i.entries)&&i.entries.length){const raw=i.__mapNRawWorldEntries||[...i.entries];i.build(raw);i.save?.();i.render?.()}
-  console.log('[Map-N] worldbook geography parser v2.0.0 installed');
+  console.log('[Map-N] worldbook geography parser v2.0.1 installed');
 }
 install();
