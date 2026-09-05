@@ -1,8 +1,8 @@
-// Map-N entity core v2.2.0
+// Map-N entity core v2.2.1
 // Single source of truth for location canonicalization, hierarchy ranking and conservative person parsing.
-const TIME_PREFIX_RE=/^\s*(?:(?:\d{1,6}年\d{1,2}月\d{1,2}日)|(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(?:\d{1,2}月\d{1,2}日))?(?:\s*(?:周[一二三四五六日天]|星期[一二三四五六日天]))?(?:\s*(?:上午|下午|晚上|夜间|凌晨|清晨|早上|中午|傍晚))?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*[|｜]\s*/u;
+const TIME_PREFIX_RE=/^\s*(?:(?:\d{1,6}年\d{1,2}月\d{1,2}日)|(?:\d{1,6}[-/.]\d{1,2}[-/.]\d{1,2})|(?:\d{1,2}月\d{1,2}日))?(?:\s*(?:周[一二三四五六日天]|星期[一二三四五六日天]))?(?:\s*(?:上午|下午|晚上|夜间|凌晨|清晨|早上|中午|傍晚))?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*[|｜]\s*/u;
 const BARE_TIME_PREFIX_RE=/^\s*\d{1,2}:\d{2}(?::\d{2})?\s*[|｜]\s*/u;
-const TIME_META_RE=/(?:\d{1,6}年\d{1,2}月\d{1,2}日|\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}月\d{1,2}日|\b\d{1,2}:\d{2}(?::\d{2})?\b|(?:时间|时刻)\s*[：:|｜])/u;
+const TIME_META_RE=/(?:\d{1,6}年\d{1,2}月\d{1,2}日|\d{1,6}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}月\d{1,2}日|\b\d{1,2}:\d{2}(?::\d{2})?\b|(?:时间|时刻)\s*[：:|｜])/u;
 const LOCATION_LABEL_RE=/^(当前(?:所在)?(?:地点|位置)|场景(?:地点|位置)?|所在(?:地点|位置)|所在地|地点|位置|Location|Place|Scene)\s*(?:[：:|｜=＝—–-]\s*|\s+)(.+?)\s*$/iu;
 const STRONG_LOCATION_LABEL_RE=/^(?:当前(?:所在)?(?:地点|位置)|所在(?:地点|位置)|所在地|地点|位置|Location|Place)$/iu;
 const CONTAINER_SUFFIX_RE=/(?:国|州|郡|府|县|城|镇|村|寨|庄|岛|海|湾|湖|河|江|山|岭|峪|谷|峡|沟|原|林|泽)$/u;
@@ -13,7 +13,7 @@ const DIR_PREFIX_RE=/^(?:东|西|南|北|东北|西北|东南|西南|上|下|内
 const SURNAME_1=new Set([...'赵钱孙李周吴郑王冯陈沈韩杨朱秦许何吕张曹金魏姜谢范彭马袁史唐薛雷罗宋熊董梁杜郭林钟徐高夏蔡田胡霍卢莫丁邓洪左石崔程陆段刘龙叶白乔谭温廖文']);
 const SURNAME_2=['欧阳','司马','上官','诸葛','夏侯','皇甫','尉迟','公孙','慕容','令狐','宇文','长孙','司徒','司空'];
 const ACTIONS=['低声道','轻声道','沉声道','插了一句','摆了摆手','摇了摇头','点了点头','转过身','转身','回头','抬头','低头','点头','摇头','皱眉','开口','伸手','抬手','摆手','扶起','扶','拉','推','递','接','拍','说','道','问','答','喊','叫','笑','哭','看','瞥','盯','望','站','坐','蹲','跪','躺','靠','走来','过来','赶到','来到','进来','出现','凑近','靠近','上前','跟着','跟在','走','跑','回','进','出'];
-const ADVERBS=['正','正在','又','再','便','却','也','先','后','忽然','突然','已经','还','仍','就','才'];
+const ADVERBS=['并没有','并未','没有','正在','忽然','突然','已经','正','又','再','便','却','也','先','后','还','仍','就','才','没','未'];
 const REMOTE_RE=/(?:准备|打算|计划|想要|要去|前往|赶往|去找|寻找|拜访|探望|看望|听说|听闻|据说|提起|谈起|想到|想起|回忆|打听|询问)/u;
 const RELATION_RE=/^(?:你|我|他|她|咱)(?:爷爷|奶奶|外公|外婆|父亲|母亲|爹|娘|爸爸|妈妈|哥哥|姐姐|弟弟|妹妹|叔叔|伯伯|婶婶|姑姑|姨妈|舅舅|师父|师傅)/u;
 const FAMILIAR_RE=/^(?:老|小|阿)[\p{Script=Han}]/u;
@@ -33,7 +33,7 @@ function placeKind(name){const s=normalizeLocationSegment(name);if(LOCAL_DETAIL_
 function parentScore(child,parent){const c=normalizeLocationSegment(child),p=normalizeLocationSegment(parent);if(!c||!p||c===p||c.length<=p.length||!c.startsWith(p))return 0;const ck=placeKind(c),pk=placeKind(p),tail=c.slice(p.length);let score=40+p.length;if(DIR_PREFIX_RE.test(tail))score+=12;if(pk==='container'&&['route','segment','local-detail','place'].includes(ck))score+=18;if(pk==='route'&&['segment','local-detail'].includes(ck))score+=22;return score;}
 function hierarchyRelationScore(child,parent,{explicit=false,pathDepth=0}={}){const semantic=parentScore(child,parent);if(semantic>0)return 3000+semantic+normalizeLocationSegment(parent).length*4;if(pathDepth>0)return 2000+pathDepth*10+String(parent||'').length;return explicit?1000+normalizeLocationSegment(parent).length:0;}
 function surnameLengthAt(src,i){for(const s of SURNAME_2)if(src.startsWith(s,i))return 2;return SURNAME_1.has(src[i])?1:0;}
-function actionAt(rest){let r=String(rest||'').replace(/^\s+/u,'');for(const a of ADVERBS)if(r.startsWith(a)){r=r.slice(a.length).replace(/^\s+/u,'');break;}for(const a of ACTIONS)if(r.startsWith(a))return a;return null;}
+function actionAt(rest){let r=String(rest||'').replace(/^\s+/u,'');for(let n=0;n<3;n++){const a=ADVERBS.find(x=>r.startsWith(x));if(!a)break;r=r.slice(a.length).replace(/^\s+/u,'');}for(const a of ACTIONS)if(r.startsWith(a))return a;return null;}
 function predicateAfter(rest){const r=String(rest||'');if(actionAt(r))return true;const lead=r.match(/^\s*在/u);if(!lead)return false;const start=lead[0].length;for(let k=start+1;k<=Math.min(r.length,start+12);k++){if(/[，。！？!?；;：:]/u.test(r[k-1]||''))break;if(actionAt(r.slice(k)))return true;}return false;}
 function personNameAt(src,i,requireAction=true){const rel=src.slice(i).match(RELATION_RE);if(rel){const n=rel[0];if(!requireAction||predicateAfter(src.slice(i+n.length)))return n;}const fam=src.slice(i).match(FAMILIAR_RE);if(fam){const n=fam[0];if(!requireAction||predicateAfter(src.slice(i+n.length)))return n;}const sl=surnameLengthAt(src,i);if(!sl)return null;for(let total=sl+1;total<=sl+2;total++){const n=src.slice(i,i+total);if(!/^[\p{Script=Han}]{2,4}$/u.test(n))continue;if(!requireAction||predicateAfter(src.slice(i+total)))return n;}return null;}
 function nearRemote(src,start,end){return REMOTE_RE.test(src.slice(Math.max(0,start-14),Math.min(src.length,end+14)));}
