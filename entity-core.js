@@ -1,14 +1,15 @@
-// Map-N entity core v2.2.1
+// Map-N entity core v2.3.0
 // Single source of truth for location canonicalization, hierarchy ranking and conservative person parsing.
 const TIME_PREFIX_RE=/^\s*(?:(?:\d{1,6}年\d{1,2}月\d{1,2}日)|(?:\d{1,6}[-/.]\d{1,2}[-/.]\d{1,2})|(?:\d{1,2}月\d{1,2}日))?(?:\s*(?:周[一二三四五六日天]|星期[一二三四五六日天]))?(?:\s*(?:上午|下午|晚上|夜间|凌晨|清晨|早上|中午|傍晚))?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*[|｜]\s*/u;
 const BARE_TIME_PREFIX_RE=/^\s*\d{1,2}:\d{2}(?::\d{2})?\s*[|｜]\s*/u;
 const TIME_META_RE=/(?:\d{1,6}年\d{1,2}月\d{1,2}日|\d{1,6}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}月\d{1,2}日|\b\d{1,2}:\d{2}(?::\d{2})?\b|(?:时间|时刻)\s*[：:|｜])/u;
 const LOCATION_LABEL_RE=/^(当前(?:所在)?(?:地点|位置)|场景(?:地点|位置)?|所在(?:地点|位置)|所在地|地点|位置|Location|Place|Scene)\s*(?:[：:|｜=＝—–-]\s*|\s+)(.+?)\s*$/iu;
 const STRONG_LOCATION_LABEL_RE=/^(?:当前(?:所在)?(?:地点|位置)|所在(?:地点|位置)|所在地|地点|位置|Location|Place)$/iu;
-const CONTAINER_SUFFIX_RE=/(?:国|州|郡|府|县|城|镇|村|寨|庄|岛|海|湾|湖|河|江|山|岭|峪|谷|峡|沟|原|林|泽)$/u;
+const CONTAINER_SUFFIX_RE=/(?:大陆|陆|洲|州|郡|府|县|国|皇朝|王朝|帝国|王国|域|界|城|镇|村|寨|庄|港|岛|群岛|海|海域|湾|湖|河|江|山系|山脉|山|岭|峪|谷|峡|沟|原|荒原|林|泽)$/u;
+const COMPOSITE_PARENT_RE=/(?:大陆|陆|洲|州|郡|府|县|国|皇朝|王朝|帝国|王国|域|界|城|镇|村|寨|庄|港|岛|群岛|海域)$/u;
 const ROUTE_SUFFIX_RE=/(?:谷道|山道|官道|古道|栈道|小道|道路|路|径)$/u;
 const LOCAL_DETAIL_SUFFIX_RE=/(?:墙根|洞口|门口|路口|谷口|沟口|村口|镇口|城门|崖根|树下|屋里|屋内|院里|院内|旁|旁边|边缘|北缘|南缘|东缘|西缘)$/u;
-const PLACE_SUFFIX_RE=/(?:港|溪|潭|峰|崖|坡|坳|洼|滩|关|隘|堡|宫|殿|寺|观|塔|洞|窟|坊|街|巷|桥|渡|码头|营地|遗迹|秘境|禁地|段|缘)$/u;
+const PLACE_SUFFIX_RE=/(?:港|溪|潭|峰|崖|坡|坳|洼|滩|关|隘|堡|宫|殿|寺|观|塔|洞|窟|坊|街|巷|桥|渡|码头|营地|遗迹|秘境|禁地|屋|宅|院|府邸|铺|店|客栈|馆|楼|阁|堂|亭|台|场|园|圃|段|缘)$/u;
 const DIR_PREFIX_RE=/^(?:东|西|南|北|东北|西北|东南|西南|上|下|内|外|前|后|左|右)(?:侧|段|部|缘)?/u;
 const SURNAME_1=new Set([...'赵钱孙李周吴郑王冯陈沈韩杨朱秦许何吕张曹金魏姜谢范彭马袁史唐薛雷罗宋熊董梁杜郭林钟徐高夏蔡田胡霍卢莫丁邓洪左石崔程陆段刘龙叶白乔谭温廖文']);
 const SURNAME_2=['欧阳','司马','上官','诸葛','夏侯','皇甫','尉迟','公孙','慕容','令狐','宇文','长孙','司徒','司空'];
@@ -23,7 +24,23 @@ function stripOuterBrackets(s){return String(s||'').trim().replace(/^[【[]\s*/u
 function stripParentheticalQualifier(s){const v=String(s||'').trim(),i=v.search(/[（(]/u);return i>=2?v.slice(0,i).trim():v;}
 function stripDanglingCloser(s){let v=String(s||'').trim();while(/[）)]$/u.test(v)){const o=(v.match(/[（(]/gu)||[]).length,c=(v.match(/[）)]/gu)||[]).length;if(c<=o)break;v=v.slice(0,-1).trim();}return v;}
 function normalizeLocationSegment(s){return stripDanglingCloser(stripParentheticalQualifier(stripTimestampPrefix(stripOuterBrackets(s)))).replace(/^[,，;；:：\s]+|[,，;；:：\s]+$/gu,'').trim();}
-function normalizeLocationParts(raw){const src=stripTimestampPrefix(stripOuterBrackets(raw));if(!src)return[];return src.split(/\s*[·•›>→/／]+\s*/u).map(normalizeLocationSegment).filter(x=>x.length>=2&&x.length<=40&&!/^\d{1,2}:\d{2}(?::\d{2})?$/u.test(x));}
+function splitCompositeLocationSegment(value){
+ const src=normalizeLocationSegment(value);if(!src)return[];
+ const route=src.match(/^(.{2,}(?:谷道|山道|官道|古道|栈道|小道|道路|路|径))((?:东|西|南|北|中|上|下|内|外|前|后)(?:侧|段|部|缘))$/u);if(route)return[route[1],route[2]];
+ const out=[];let rest=src;
+ for(let guard=0;guard<8;guard++){
+  let cut=0;
+  for(let n=2;n<=rest.length-2;n++){
+   const head=rest.slice(0,n),tail=rest.slice(n);
+   if(COMPOSITE_PARENT_RE.test(head)&&placeKind(tail)!=='unknown'){cut=n;break;}
+  }
+  if(!cut)break;
+  out.push(rest.slice(0,cut));rest=rest.slice(cut);
+ }
+ out.push(rest);return out.filter(Boolean);
+}
+function expandLocationParts(parts){return(Array.isArray(parts)?parts:[parts]).flatMap(splitCompositeLocationSegment).filter(x=>x.length>=2&&x.length<=40&&!/^\d{1,2}:\d{2}(?::\d{2})?$/u.test(x));}
+function normalizeLocationParts(raw){const src=stripTimestampPrefix(stripOuterBrackets(raw));if(!src)return[];return expandLocationParts(src.split(/\s*[·•›>→/／]+\s*/u));}
 function cleanMetaLine(line){return String(line||'').trim().replace(/^\s*(?:>\s*|#{1,6}\s*|[-*+]\s+)/u,'').replace(/\*\*/gu,'').trim();}
 function locationShape(parts,raw=''){if(!parts?.length)return false;if(/[。！？!?；;]/u.test(raw))return false;if(parts.length>=2)return true;return placeKind(parts[0])!=='unknown';}
 function labeledLocation(line){let raw=stripOuterBrackets(cleanMetaLine(line)).trim();const pin=raw.match(/^[📍🧭]\s*(.+)$/u);if(pin){const parts=normalizeLocationParts(pin[1]);return parts.length?parts:null;}const m=raw.match(LOCATION_LABEL_RE);if(!m)return null;const parts=normalizeLocationParts(m[2]);if(!parts.length)return null;return STRONG_LOCATION_LABEL_RE.test(m[1])||locationShape(parts,m[2])?parts:null;}
@@ -38,4 +55,4 @@ function predicateAfter(rest){const r=String(rest||'');if(actionAt(r))return tru
 function personNameAt(src,i,requireAction=true){const rel=src.slice(i).match(RELATION_RE);if(rel){const n=rel[0];if(!requireAction||predicateAfter(src.slice(i+n.length)))return n;}const fam=src.slice(i).match(FAMILIAR_RE);if(fam){const n=fam[0];if(!requireAction||predicateAfter(src.slice(i+n.length)))return n;}const sl=surnameLengthAt(src,i);if(!sl)return null;for(let total=sl+1;total<=sl+2;total++){const n=src.slice(i,i+total);if(!/^[\p{Script=Han}]{2,4}$/u.test(n))continue;if(!requireAction||predicateAfter(src.slice(i+total)))return n;}return null;}
 function nearRemote(src,start,end){return REMOTE_RE.test(src.slice(Math.max(0,start-14),Math.min(src.length,end+14)));}
 function extractPeople(text,known=[]){const src=String(text||''),out=[];const add=(n,s,e)=>{if(n&&!nearRemote(src,s,e)&&!out.includes(n))out.push(n);};for(let i=0;i<src.length;i++){if(i>0&&!/[。！？!?；;\n：:“”「」『』，,]/u.test(src[i-1]))continue;const n=personNameAt(src,i,true);if(n)add(n,i,i+n.length);}const cue=/(?:让|叫|请|扶|拉|推|找|问|看向|望向|对着|跟着|跟|和|与)/gu;for(const m of src.matchAll(cue)){let i=m.index+m[0].length;while(/\s/u.test(src[i]||''))i++;const n=personNameAt(src,i,false);if(n)add(n,i,i+n.length);}for(let i=0;i<src.length;i++){const a=personNameAt(src,i,false);if(!a)continue;let j=i+a.length;const sep=src.slice(j).match(/^\s*(?:和|与|跟)\s*/u);if(!sep)continue;j+=sep[0].length;const b=personNameAt(src,j,false);if(!b)continue;if(predicateAfter(src.slice(j+b.length))){add(a,i,i+a.length);add(b,j,j+b.length);}}for(const k of known){const n=String(k||'').trim();if(!n)continue;let idx=src.indexOf(n);while(idx>=0){const before=src.slice(Math.max(0,idx-3),idx),after=src.slice(idx+n.length);if(predicateAfter(after)||/(?:让|叫|请|扶|拉|推|找|问|看向|望向|对着|跟着|跟|和|与)\s*$/u.test(before))add(n,idx,idx+n.length);idx=src.indexOf(n,idx+1);}}return uniq(out).slice(0,16);}
-const api={normalizeLocationSegment,normalizeLocationParts,parseHeaderLocation,placeKind,parentScore,hierarchyRelationScore,extractPeople,actionAt,personNameAt,predicateAfter};globalThis.MapNEntityCore=api;export {normalizeLocationSegment,normalizeLocationParts,parseHeaderLocation,placeKind,parentScore,hierarchyRelationScore,extractPeople,actionAt,personNameAt,predicateAfter};
+const api={normalizeLocationSegment,normalizeLocationParts,splitCompositeLocationSegment,expandLocationParts,parseHeaderLocation,placeKind,parentScore,hierarchyRelationScore,extractPeople,actionAt,personNameAt,predicateAfter};globalThis.MapNEntityCore=api;export {normalizeLocationSegment,normalizeLocationParts,splitCompositeLocationSegment,expandLocationParts,parseHeaderLocation,placeKind,parentScore,hierarchyRelationScore,extractPeople,actionAt,personNameAt,predicateAfter};
