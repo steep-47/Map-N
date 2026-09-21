@@ -6,7 +6,7 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.6.4",
+  "version": "1.6.5",
   "description": "认知舆图：完整地图实体迁移与撤销、全历史场景回溯、稳定地理归属与明确纠错、同名地点分支，并向正文生成注入精简地理记忆",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
