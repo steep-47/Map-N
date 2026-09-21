@@ -1,9 +1,12 @@
 import fs from 'node:fs';
 const url=new URL('../entity-core.js',import.meta.url);const source=fs.readFileSync(url,'utf8');const core=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 const same=(actual,expected,name)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw new Error(`${name}: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`)};
-const setSame=(actual,expected,name)=>same([...actual].sort(),[...expected].sort(),name);
 same(core.normalizeLocationParts('08:00 | 沉陆'),['沉陆'],'timestamp stripped');
 same(core.parseHeaderLocation('12500-01-01 08:00 | 云陆·大炎皇朝·青定府·永澄县·陈宅\n正文'),['云陆','大炎皇朝','青定府','永澄县','陈宅'],'five-digit numeric year header hierarchy');
+same(core.parseHeaderLocation('【云陆／大黎王朝／苍梧郡／青溪镇｜12500年12月10日 08:00】\n正文'),['云陆','大黎王朝','苍梧郡','青溪镇'],'location-before-time header hierarchy');
+const multi='【云陆／大黎王朝／苍梧郡／青溪镇｜12500年12月10日 08:00】\n第一段。\n【云陆／大黎王朝／苍梧郡／马集／牲口市｜12500年12月10日 11:00】\n第二段。';
+same(core.parseHeaderLocations(multi),[['云陆','大黎王朝','苍梧郡','青溪镇'],['云陆','大黎王朝','苍梧郡','马集','牲口市']],'all scene headers in one reply');
+same(core.parseHeaderLocation(multi),['云陆','大黎王朝','苍梧郡','马集','牲口市'],'last scene header is current location');
 same(core.normalizeLocationParts('08:30 | 沉陆 · 石峪 · 石峪西侧旧谷道（老鹰崖塌方石堆北缘）'),['沉陆','石峪','石峪西侧旧谷道'],'parenthetical qualifier stripped');
 same(core.parseHeaderLocation('【08:30 | 沉陆 · 石峪 · 石峪西侧旧谷道（旧墙墙根洞口旁）】\n正文'),['沉陆','石峪','石峪西侧旧谷道'],'header hierarchy');
 same(core.parseHeaderLocation('12500年01月01日 08:00\n地点：云陆·青梧国·临川府·白石县·柳溪村\n柳溪村坐落在两道缓坡之间。'),['云陆','青梧国','临川府','白石县','柳溪村'],'explicit location label hierarchy');
@@ -20,12 +23,4 @@ if(!(core.hierarchyRelationScore('石峪西侧旧谷道','石峪')>core.hierarch
 if(!(core.hierarchyRelationScore('石峪西侧旧谷道北段','石峪西侧旧谷道')>core.hierarchyRelationScore('石峪西侧旧谷道北段','沉陆',{explicit:true})))throw new Error('route segment must stay under route, not flatten to region');
 if(!(core.hierarchyRelationScore('石峪西侧旧谷道','石峪')>core.hierarchyRelationScore('石峪西侧旧谷道','沉陆',{pathDepth:1})))throw new Error('sparse scene-header ancestry must not override missing intermediate semantic parent');
 if(!(core.hierarchyRelationScore('石峪西侧旧谷道北段','石峪西侧旧谷道')>core.hierarchyRelationScore('石峪西侧旧谷道北段','沉陆',{pathDepth:1})))throw new Error('scene-header ancestor must not flatten route segment');
-setSame(core.extractPeople('霍三在旁边低声道：“陈望，先让你爷爷歇会儿。”'),['霍三','你爷爷'],'subject + controlled relation person');
-setSame(core.extractPeople('陈望摆了摆手，又看向你：“等伤药。”'),['陈望'],'subject boundary');
-setSame(core.extractPeople('陈尘没答。'),['陈尘'],'negated action keeps name boundary');
-setSame(core.extractPeople('陈尘却没答。'),['陈尘'],'stacked adverbs keep name boundary');
-setSame(core.extractPeople('霍三和陈望回村。'),['霍三','陈望'],'coordinated subjects');
-setSame(core.extractPeople('让霍三陪你去一趟。'),['霍三'],'controlled object person');
-setSame(core.extractPeople('石峪西侧旧谷道北段边缘有风。'),[],'place must not become person');
-setSame(core.extractPeople('拐过沟以后，东西放在洞口。'),[],'verbs/nouns must not become people');
 console.log('Map-N entity regression: OK');

@@ -1,13 +1,13 @@
 {
-  "display_name":"Map-N",
-  "loading_order":20,
-  "requires":[],
-  "optional":[],
-  "js":"index.js",
-  "css":"Map-N.css",
-  "author":"Map-N",
-  "version":"1.5.30",
-  "description":"认知舆图：安全拆分聚落与具体场所，读取场景正文中的明确归属关系，并从导入聊天重建已知地点层级",
-  "homePage":"https://github.com/steep-47/Map-N",
-  "auto_update":true
+  "display_name": "Map-N",
+  "loading_order": 20,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "Map-N.css",
+  "author": "Map-N",
+  "version": "1.6.0",
+  "description": "认知舆图：从世界书与剧情场景头维护已确认地理层级，支持双向时间/地点格式、多场景定位，并向正文生成注入精简地理记忆",
+  "homePage": "https://github.com/steep-47/Map-N",
+  "auto_update": true
 }

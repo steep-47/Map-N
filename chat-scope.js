@@ -1,4 +1,4 @@
-// Map-N chat scope refresher v1.1.0
+// Map-N chat scope refresher v1.2.0
 // Keep every chat file isolated: refresh SillyTavern context, switch storage scope, invalidate graph/runtime caches,
 // then reload only the new chat's persisted main state. Worldbook is rebuilt by the pending prime() call.
 const scopeWait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -25,10 +25,10 @@ async function install(){
     inst.root={id:ROOT,children:[],parent:null};
     inst.nodeMap={};inst.alias=new Map();inst.entries=[];inst.lastSig='';inst.__mapNHierarchyGraphSig=null;
     // Per-chat module caches must be reloaded from the NEW memoryKey, never carried across chat files.
-    inst.__mapNSceneStore=null;inst.__mapNPresenceState=null;
-    inst.__mapNSceneSaveDirty=false;inst.__mapNPresenceSaveDirty=false;inst.__mapNMainSaveDirty=false;
+    inst.__mapNSceneStore=null;
+    inst.__mapNSceneSaveDirty=false;inst.__mapNMainSaveDirty=false;
     // Re-read the new chat's persisted main map state after the scope is known.
-    inst.path=[ROOT];inst.discovered=new Set([ROOT]);inst.encountered=new Set();inst.currentPos=null;inst.currentChars=[];
+    inst.path=[ROOT];inst.discovered=new Set([ROOT]);inst.currentPos=null;
     inst.load?.();
   };
   refresh();
@@ -43,6 +43,6 @@ async function install(){
     if(et.CHAT_CHANGED)es.on(et.CHAT_CHANGED,onChange);
     if(et.CHARACTER_SELECTED)es.on(et.CHARACTER_SELECTED,onChange);
   }
-  console.log('[Map-N] chat scope refresher v1.1.0 installed',inst.memoryKey);
+  console.log('[Map-N] chat scope refresher v1.2.0 installed',inst.memoryKey);
 }
 install();
