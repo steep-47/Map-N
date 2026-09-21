@@ -1,4 +1,4 @@
-// Map-N scene scanner v2.6.0
+// Map-N scene scanner v2.7.0
 // Responsibility: learn canonical location chains from structured scene headers. No person parsing here.
 // Scene-header locations keep message provenance so recent swipe/update/delete can roll back only affected learned nodes.
 const wait=ms=>new Promise(r=>setTimeout(r,ms)),ROOT='世界舆图',MEMORY_VERSION=9;
@@ -47,7 +47,7 @@ function adoptStaticPlaceholder(i,r){
  if(compiled){for(const [child,p] of [...compiled.entries()])if(p===old.id)compiled.set(child,r.id);compiled.delete(old.id);}
  for(const [a,target] of [...(i.alias?.entries?.()||[])])if(target===old.id)i.alias.delete(a);
  i.discovered?.delete?.(old.id);delete i.nodeMap[old.id];
- return{...old,children,worldbookContent:old.worldbookContent||old.content||''};
+ return{...old,children,worldbookContent:old.worldbookContent||old.content||'',worldbookStaticId:old.worldbookStaticId||old.id,worldbookParent:old.worldbookParent||old.parent||ROOT,worldbookAliases:uniq([...(old.worldbookAliases||[]),...(old.aliases||[])]),worldbookChildren:uniq([...(old.worldbookChildren||[]),...children])};
 }
 function bindAlias(i,a,id){
  if(!a)return;i.__mapNAmbiguousAliases||=new Set();if(i.__mapNAmbiguousAliases.has(a))return;
@@ -56,12 +56,20 @@ function bindAlias(i,a,id){
  if(p?.learned===true&&n?.learned===true){i.alias.delete(a);i.__mapNAmbiguousAliases.add(a);return;}
  if(p?.learned!==true&&n?.learned===true)i.alias.set(a,id);
 }
+function sceneContentFor(r){return['剧情场景头确认的地点。',...(r?.evidence||[]).map(e=>e.text)].join(' ');}
+function applyWorldbookMeta(n,src){
+ if(!n||!src)return;n.worldbookBacked=true;n.worldbookContent=src.worldbookContent||src.content||n.worldbookContent||'';
+ n.worldbookStaticId=src.worldbookStaticId||src.id||n.worldbookStaticId||n.displayName;
+ n.worldbookParent=src.worldbookParent||src.parent||n.worldbookParent||ROOT;
+ n.worldbookAliases=uniq([...(n.worldbookAliases||[]),...(src.worldbookAliases||[]),...(src.aliases||[])]);
+ n.worldbookChildren=uniq([...(n.worldbookChildren||[]),...(src.worldbookChildren||[]),...(src.children||[])]);
+}
 function mergeRecord(i,r){
- if(!r)return;const aliases=uniq([...(r.aliases||[]),r.label]),adopted=adoptStaticPlaceholder(i,r),existing=i.nodeMap[r.id],sceneContent=['剧情场景头确认的地点。',...(r.evidence||[]).map(e=>e.text)].join(' ');
+ if(!r)return;const aliases=uniq([...(r.aliases||[]),r.label]),adopted=adoptStaticPlaceholder(i,r),existing=i.nodeMap[r.id],sceneContent=sceneContentFor(r);
  if(!existing){const worldbookContent=adopted?.worldbookContent||adopted?.content||'';i.nodeMap[r.id]={id:r.id,displayName:r.label,aliases:uniq([...(adopted?.aliases||[]),...aliases]),content:[worldbookContent,sceneContent].filter(Boolean).join(' '),worldbookContent,type:'location',children:[...(adopted?.children||[])],parent:r.parent,isWater:!!adopted?.isWater||/海|河|湖|江|溪|潭|湾|岸|滩/u.test(r.label),isMountain:!!adopted?.isMountain||/山|峰|岭|崖|峪|谷/u.test(r.label),learned:true,source:'scene-header',worldbookBacked:!!adopted};}
- const n=i.nodeMap[r.id],sceneOwned=n.source==='scene-header'&&n.learned===true;
- if(sceneOwned){if(adopted)n.worldbookContent=adopted.worldbookContent||adopted.content||n.worldbookContent||'';n.displayName=r.label;n.parent=r.parent;n.content=[n.worldbookContent,sceneContent].filter(Boolean).join(' ');n.learned=true;n.source='scene-header';n.worldbookBacked=n.worldbookBacked||!!adopted;}
- n.aliases=uniq([...(n.aliases||[]),...(adopted?.aliases||[]),...aliases]);for(const a of n.aliases)bindAlias(i,a,r.id);i.discovered.add(r.id);
+ const n=i.nodeMap[r.id],sceneOwned=n.source==='scene-header'&&n.learned===true;if(adopted)applyWorldbookMeta(n,adopted);
+ if(sceneOwned){n.displayName=r.label;n.parent=r.parent;n.content=[n.worldbookContent,sceneContent].filter(Boolean).join(' ');n.learned=true;n.source='scene-header';}
+ n.aliases=uniq([...(n.aliases||[]),...(n.worldbookAliases||[]),...(adopted?.aliases||[]),...aliases]);for(const a of n.aliases)bindAlias(i,a,r.id);i.discovered.add(r.id);
  if(sceneOwned){if(r.parent===ROOT){i.root.children||=[];if(!i.root.children.includes(r.id))i.root.children.push(r.id);}else if(i.nodeMap[r.parent]){i.nodeMap[r.parent].children||=[];if(!i.nodeMap[r.parent].children.includes(r.id))i.nodeMap[r.parent].children.push(r.id);}}
 }
 function mergeAll(i,core){migrate(i,core);for(const r of Object.values(i.__mapNSceneStore?.learnedLocations||{}))mergeRecord(i,r);}
@@ -80,11 +88,23 @@ function correctionIntent(i,sourceIndex,label,oldParts,newParts){
 function mergeStoreRecord(a,b){
  if(!a)return b;if(!b)return a;return{...a,...b,aliases:uniq([...(a.aliases||[]),...(b.aliases||[])]),sources:uniq([...(a.sources||[]),...(b.sources||[])]),evidence:evidenceList(a.evidence,b.evidence)};
 }
+function remapCompiledParents(i,movedMap){
+ const compiled=i.__mapNCompiledParents instanceof Map?i.__mapNCompiledParents:null;if(!compiled)return;
+ const entries=[...compiled.entries()];compiled.clear();for(const [child,parent] of entries)compiled.set(movedMap.get(child)||child,movedMap.get(parent)||parent);
+}
 function rehomePrefix(i,oldPrefix,newPrefix){
  if(!oldPrefix||!newPrefix||oldPrefix===newPrefix)return;const s=i.__mapNSceneStore||=load(i),rows=Object.entries(s.learnedLocations||{}).filter(([id])=>id===oldPrefix||id.startsWith(oldPrefix+'／')).sort((a,b)=>a[0].length-b[0].length);
- if(!rows.length)return;const moved=[];
- for(const [oldId,rec] of rows){const suffix=oldId.slice(oldPrefix.length),newId=newPrefix+suffix,parts=newId.split('／').filter(Boolean),parent=parts.length>1?parts.slice(0,-1).join('／'):ROOT,next={...rec,id:newId,parent,label:parts.at(-1)};s.learnedLocations[newId]=mergeStoreRecord(s.learnedLocations[newId],next);delete s.learnedLocations[oldId];moved.push({oldId,newId});}
- for(const {oldId} of moved)detachNode(i,oldId);for(const {newId} of moved)mergeRecord(i,s.learnedLocations[newId]);
+ if(!rows.length)return;const movedMap=new Map(rows.map(([oldId])=>[oldId,newPrefix+oldId.slice(oldPrefix.length)])),snapshots=new Map();
+ for(const [oldId] of rows){const n=i.nodeMap?.[oldId];if(n)snapshots.set(oldId,{...n,aliases:[...(n.aliases||[])],children:[...(n.children||[])],worldbookAliases:[...(n.worldbookAliases||[])],worldbookChildren:[...(n.worldbookChildren||[])]});}
+ for(const [oldId,rec] of rows){const newId=movedMap.get(oldId),parts=newId.split('／').filter(Boolean),parent=parts.length>1?parts.slice(0,-1).join('／'):ROOT,next={...rec,id:newId,parent,label:parts.at(-1)};s.learnedLocations[newId]=mergeStoreRecord(s.learnedLocations[newId],next);delete s.learnedLocations[oldId];}
+ remapCompiledParents(i,movedMap);
+ for(const [childId,child] of Object.entries(i.nodeMap||{})){if(!child?.parent)continue;const mapped=movedMap.get(child.parent);if(mapped)child.parent=mapped;}
+ for(const [oldId] of rows)detachNode(i,oldId);
+ for(const [oldId] of rows){const newId=movedMap.get(oldId),rec=s.learnedLocations[newId];mergeRecord(i,rec);const snap=snapshots.get(oldId),n=i.nodeMap[newId];if(!snap||!n)continue;
+  if(snap.worldbookBacked)applyWorldbookMeta(n,snap);n.isWater=n.isWater||!!snap.isWater;n.isMountain=n.isMountain||!!snap.isMountain;
+  const remappedChildren=(snap.children||[]).map(x=>movedMap.get(x)||x),remappedWB=(snap.worldbookChildren||[]).map(x=>movedMap.get(x)||x);n.children=uniq([...(n.children||[]),...remappedChildren]);n.worldbookChildren=uniq([...(n.worldbookChildren||[]),...remappedWB]);
+  n.aliases=uniq([...(n.aliases||[]),...(snap.aliases||[]),...(n.worldbookAliases||[])]);for(const a of n.aliases)bindAlias(i,a,newId);n.content=[n.worldbookContent,sceneContentFor(rec)].filter(Boolean).join(' ');
+ }
  if(i.currentPos&&(i.currentPos===oldPrefix||i.currentPos.startsWith(oldPrefix+'／')))i.currentPos=newPrefix+i.currentPos.slice(oldPrefix.length);
  if(Array.isArray(i.path))i.path=i.currentPos?i.pathTo(i.currentPos):[ROOT];i.__mapNHierarchyGraphSig=null;save(i);
 }
@@ -107,7 +127,23 @@ function learn(i,core,parts,setCurrent=true,sourceIndex=null,sourceText=''){
  if(setCurrent){i.currentPos=leaf;i.path=i.pathTo(leaf);}i.save?.();return leaf;
 }
 function detachNode(i,id){const n=i.nodeMap?.[id];if(!n||n.source!=='scene-header'||n.learned!==true)return;if(n.parent===ROOT)removeChild(i.root?.children,id);else removeChild(i.nodeMap?.[n.parent]?.children,id);delete i.nodeMap[id];for(const [a,target] of [...(i.alias?.entries?.()||[])])if(target===id)i.alias.delete(a);i.discovered?.delete?.(id);if(i.currentPos===id)i.currentPos=null;if(Array.isArray(i.path)&&i.path.includes(id))i.path=[ROOT];}
-function reconcileRecent(i,start,end,chat){const s=i.__mapNSceneStore||=load(i);const valid=new Set();for(let n=start;n<end;n++){const m=chat?.[n];if(m?.mes&&!m.is_user)valid.add(sourceKey(n,String(m.mes)));}let changed=false;for(const [id,rec] of Object.entries(s.learnedLocations||{})){const sources=uniq(rec?.sources||[]);if(!sources.length)continue;const kept=sources.filter(k=>{const idx=Number(String(k).split(':',1)[0]);return !Number.isInteger(idx)||idx<start||valid.has(k)});if(kept.length!==sources.length){rec.sources=kept;rec.evidence=(rec.evidence||[]).filter(e=>kept.includes(e.source));changed=true;}if(!kept.length){delete s.learnedLocations[id];detachNode(i,id);changed=true;}}if(changed){i.__mapNHierarchyGraphSig=null;save(i);}return changed;}
+function restoreWorldbookPlaceholder(i,id){
+ const n=i.nodeMap?.[id];if(!n?.worldbookBacked)return false;const staticId=n.worldbookStaticId||n.displayName||String(id).split('／').at(-1),rawParent=n.worldbookParent||ROOT,parent=rawParent===ROOT?ROOT:(i.nodeMap?.[rawParent]?rawParent:(i.alias?.get?.(rawParent)||ROOT));
+ const aliases=uniq([staticId,...(n.worldbookAliases||[])]),children=uniq([...(n.worldbookChildren||[])]),wasDiscovered=i.discovered?.has?.(id);
+ detachNode(i,id);i.nodeMap[staticId]={id:staticId,displayName:staticId,aliases,content:n.worldbookContent||'',type:'location',children:[...children],parent,isWater:!!n.isWater,isMountain:!!n.isMountain};
+ for(const childId of children){const child=i.nodeMap?.[childId];if(child)child.parent=staticId;}
+ const compiled=i.__mapNCompiledParents instanceof Map?i.__mapNCompiledParents:null;if(compiled){for(const [child,p] of [...compiled.entries()])if(p===id)compiled.set(child,staticId);}
+ if(parent===ROOT){i.root.children||=[];if(!i.root.children.includes(staticId))i.root.children.push(staticId);}else if(i.nodeMap[parent]){i.nodeMap[parent].children||=[];if(!i.nodeMap[parent].children.includes(staticId))i.nodeMap[parent].children.push(staticId);}
+ for(const a of aliases)bindAlias(i,a,staticId);if(wasDiscovered)i.discovered?.add?.(staticId);return true;
+}
+function reconcileRecent(i,start,end,chat){
+ const s=i.__mapNSceneStore||=load(i),valid=new Set();for(let n=start;n<end;n++){const m=chat?.[n];if(m?.mes&&!m.is_user)valid.add(sourceKey(n,String(m.mes)));}let changed=false;
+ for(const [id,rec] of Object.entries(s.learnedLocations||{})){const sources=uniq(rec?.sources||[]);if(!sources.length)continue;const kept=sources.filter(k=>{const idx=Number(String(k).split(':',1)[0]);return !Number.isInteger(idx)||idx<start||valid.has(k)});
+  if(kept.length!==sources.length){rec.sources=kept;rec.evidence=(rec.evidence||[]).filter(e=>kept.includes(e.source));changed=true;}
+  if(!kept.length){const restored=restoreWorldbookPlaceholder(i,id);delete s.learnedLocations[id];if(!restored)detachNode(i,id);changed=true;}else if(kept.length!==sources.length)mergeRecord(i,rec);
+ }
+ if(changed){i.__mapNHierarchyGraphSig=null;save(i);}return changed;
+}
 function scanHeaders(i,core,chat,start=0,end=(chat||[]).length){let count=0,last=null;for(let n=Math.max(0,start);n<Math.min(end,(chat||[]).length);n++){const m=chat?.[n];if(!m?.mes||m.is_user)continue;const text=String(m.mes),paths=core.parseHeaderLocations?.(text)||[];for(const p of paths){last=learn(i,core,p,true,n,text);count++;}}return{count,last};}
-async function install(){for(let n=0;n<160&&(!window.MapNInstance||!globalThis.MapNEntityCore);n++)await wait(50);const i=window.MapNInstance,core=globalThis.MapNEntityCore;if(!i||!core||i.__sceneScanner260)return;i.__sceneScanner260=true;i.__mapNSceneStore=load(i);migrate(i,core);const priorFlush=i.__mapNFlushBatch?.bind(i);i.__mapNFlushBatch=function(){priorFlush?.();if(this.__mapNSceneSaveDirty){this.__mapNSceneSaveDirty=false;write(this);}};const oldBuild=i.build.bind(i);i.build=function(entries){oldBuild(entries);this.__mapNAmbiguousAliases=new Set();mergeAll(this,core);};const oldProcess=i.process.bind(i);i.process=function(text,isUser=false){oldProcess(text,isUser);if(!isUser&&text){const paths=core.parseHeaderLocations?.(text)||[];for(const parts of paths)learn(this,core,parts,true,null,String(text));}if(this.container?.classList.contains('open'))this.render?.();};mergeAll(i,core);const chat=i.ctx?.chat||[],r=recentRange(chat);scanHeaders(i,core,chat,r.start,r.end);globalThis.MapNSceneScanner={reconcileRecent:(inst,start,end,all)=>reconcileRecent(inst,start,end,all),scanAll:(inst,all)=>scanHeaders(inst,core,all,0,(all||[]).length)};const es=i.ctx?.eventSource,et=i.ctx?.eventTypes||i.ctx?.event_types;if(es&&et){const onMutation=()=>setTimeout(()=>{const fresh=window.SillyTavern?.getContext?.();if(fresh)i.ctx=fresh;const all=i.ctx?.chat||[],rr=recentRange(all);if(reconcileRecent(i,rr.start,rr.end,all))i.render?.();},80);['MESSAGE_SWIPED','MESSAGE_UPDATED','MESSAGE_DELETED'].forEach(k=>{if(et[k])es.on(et[k],onMutation)});}i.render?.();console.log('[Map-N] scene scanner v2.6.0 installed');}
+async function install(){for(let n=0;n<160&&(!window.MapNInstance||!globalThis.MapNEntityCore);n++)await wait(50);const i=window.MapNInstance,core=globalThis.MapNEntityCore;if(!i||!core||i.__sceneScanner270)return;i.__sceneScanner270=true;i.__mapNSceneStore=load(i);migrate(i,core);const priorFlush=i.__mapNFlushBatch?.bind(i);i.__mapNFlushBatch=function(){priorFlush?.();if(this.__mapNSceneSaveDirty){this.__mapNSceneSaveDirty=false;write(this);}};const oldBuild=i.build.bind(i);i.build=function(entries){oldBuild(entries);this.__mapNAmbiguousAliases=new Set();mergeAll(this,core);};const oldProcess=i.process.bind(i);i.process=function(text,isUser=false){oldProcess(text,isUser);if(!isUser&&text){const paths=core.parseHeaderLocations?.(text)||[];for(const parts of paths)learn(this,core,parts,true,null,String(text));}if(this.container?.classList.contains('open'))this.render?.();};mergeAll(i,core);const chat=i.ctx?.chat||[],r=recentRange(chat);scanHeaders(i,core,chat,r.start,r.end);globalThis.MapNSceneScanner={reconcileRecent:(inst,start,end,all)=>reconcileRecent(inst,start,end,all),scanAll:(inst,all)=>scanHeaders(inst,core,all,0,(all||[]).length)};const es=i.ctx?.eventSource,et=i.ctx?.eventTypes||i.ctx?.event_types;if(es&&et){const onMutation=()=>setTimeout(()=>{const fresh=window.SillyTavern?.getContext?.();if(fresh)i.ctx=fresh;const all=i.ctx?.chat||[],rr=recentRange(all);if(reconcileRecent(i,rr.start,rr.end,all))i.render?.();},80);['MESSAGE_SWIPED','MESSAGE_UPDATED','MESSAGE_DELETED'].forEach(k=>{if(et[k])es.on(et[k],onMutation)});}i.render?.();console.log('[Map-N] scene scanner v2.7.0 installed');}
 install();

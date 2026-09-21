@@ -2,7 +2,7 @@ import fs from 'node:fs';
 const url=new URL('../entity-core.js',import.meta.url);const source=fs.readFileSync(url,'utf8');const core=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 const sceneUrl=new URL('../scene-scanner.js',import.meta.url),sceneSource=fs.readFileSync(sceneUrl,'utf8');
 const storage=new Map();globalThis.localStorage={getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)};
-const sceneModuleSource=sceneSource.replace(/\ninstall\(\);\s*$/u,'')+'\nexport {empty,learn,scanHeaders};';
+const sceneModuleSource=sceneSource.replace(/\ninstall\(\);\s*$/u,'')+'\nexport {empty,learn,scanHeaders,reconcileRecent};';
 const scene=await import(`data:text/javascript;base64,${Buffer.from(sceneModuleSource).toString('base64')}`);
 const same=(actual,expected,name)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw new Error(`${name}: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`)};
 same(core.normalizeLocationParts('08:00 | 沉陆'),['沉陆'],'timestamp stripped');
@@ -107,6 +107,59 @@ function makeInst(chat=[]){
  const result=scene.scanHeaders(i,core,chat,0,chat.length);
  same(result.count,1,'full history scene header count');
  ok(!!i.__mapNSceneStore.learnedLocations['云陆／大黎王朝／苍梧郡／青溪镇'],'full history scan must learn early header');
+}
+
+// Swipe/edit rollback must rebuild node content after stale evidence is removed.
+{
+ const i=makeInst(),a='【云陆／大黎王朝／苍梧郡／青溪镇｜08:00】旧A',b='【云陆／大黎王朝／苍梧郡／青溪镇｜09:00】旧B';
+ scene.learn(i,core,['云陆','大黎王朝','苍梧郡','青溪镇'],true,0,a);
+ scene.learn(i,core,['云陆','大黎王朝','苍梧郡','青溪镇'],true,2,b);
+ scene.reconcileRecent(i,0,3,[{is_user:false,mes:a},{is_user:true,mes:'x'},{is_user:false,mes:'新内容'}]);
+ const id='云陆／大黎王朝／苍梧郡／青溪镇';
+ ok(!i.__mapNSceneStore.learnedLocations[id].evidence.some(e=>e.text.includes('旧B')),'stale swipe evidence must leave scene store');
+ ok(!i.nodeMap[id].content.includes('旧B'),'stale swipe evidence must leave node content');
+}
+
+// Correcting an adopted worldbook-backed node preserves its worldbook identity and content.
+{
+ const chat=Array.from({length:5},()=>({is_user:false,mes:''}));
+ chat[3]={is_user:true,mes:'纠正，苍梧郡归属写错了，属于大黎王朝，不是大炎皇朝。'};chat[4]={is_user:false,mes:'ok'};
+ const i=makeInst(chat);
+ i.nodeMap['苍梧郡']={id:'苍梧郡',displayName:'苍梧郡',aliases:['苍梧郡','苍梧'],content:'世界书郡资料',type:'location',children:[],parent:'世界舆图'};
+ i.root.children=['苍梧郡'];i.alias.set('苍梧郡','苍梧郡');i.alias.set('苍梧','苍梧郡');
+ scene.learn(i,core,['云陆','大炎皇朝','苍梧郡','青溪镇'],true,1,'old');
+ scene.learn(i,core,['云陆','大黎王朝','苍梧郡','青溪镇'],true,4,'ok');
+ const node=i.nodeMap['云陆／大黎王朝／苍梧郡'];
+ ok(node?.worldbookBacked===true,'corrected node must remain worldbook-backed');
+ same(node?.worldbookContent,'世界书郡资料','corrected node keeps worldbook content');
+ same(i.alias.get('苍梧'),'云陆／大黎王朝／苍梧郡','secondary worldbook alias follows correction');
+}
+
+// Correcting a parent moves static worldbook children and compiled parent links too.
+{
+ const chat=Array.from({length:5},()=>({is_user:false,mes:''}));
+ chat[3]={is_user:true,mes:'纠正，苍梧郡归属写错了，属于大黎王朝，不是大炎皇朝。'};chat[4]={is_user:false,mes:'ok'};
+ const i=makeInst(chat);
+ i.__mapNCompiledParents=new Map([['青溪县','苍梧郡']]);
+ i.nodeMap['苍梧郡']={id:'苍梧郡',displayName:'苍梧郡',aliases:['苍梧郡'],content:'世界书郡资料',type:'location',children:['青溪县'],parent:'世界舆图'};
+ i.nodeMap['青溪县']={id:'青溪县',displayName:'青溪县',aliases:['青溪县'],content:'世界书县资料',type:'location',children:[],parent:'苍梧郡'};
+ i.root.children=['苍梧郡'];i.alias.set('苍梧郡','苍梧郡');i.alias.set('青溪县','青溪县');
+ scene.learn(i,core,['云陆','大炎皇朝','苍梧郡','青溪镇'],true,1,'old');
+ scene.learn(i,core,['云陆','大黎王朝','苍梧郡','青溪镇'],true,4,'ok');
+ same(i.nodeMap['青溪县'].parent,'云陆／大黎王朝／苍梧郡','static child follows corrected parent');
+ same(i.__mapNCompiledParents.get('青溪县'),'云陆／大黎王朝／苍梧郡','compiled parent follows corrected parent');
+}
+
+// If the sole dynamic evidence disappears, an adopted worldbook node returns to its static form.
+{
+ const i=makeInst(),txt='【云陆／大炎皇朝｜08:00】';
+ i.nodeMap['大炎皇朝']={id:'大炎皇朝',displayName:'大炎皇朝',aliases:['大炎皇朝','大炎'],content:'世界书大炎资料',type:'location',children:[],parent:'世界舆图'};
+ i.root.children=['大炎皇朝'];i.alias.set('大炎皇朝','大炎皇朝');i.alias.set('大炎','大炎皇朝');
+ scene.learn(i,core,['云陆','大炎皇朝'],true,0,txt);
+ scene.reconcileRecent(i,0,1,[]);
+ ok(!i.nodeMap['云陆／大炎皇朝'],'dynamic node with no scene evidence must be removed');
+ ok(!!i.nodeMap['大炎皇朝'],'worldbook placeholder must be restored');
+ same(i.nodeMap['大炎皇朝'].content,'世界书大炎资料','restored placeholder keeps worldbook content');
 }
 
 console.log('Map-N regression: OK');
