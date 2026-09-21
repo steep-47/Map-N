@@ -68,9 +68,6 @@ function ensureLightStyles() {
 #mapN-container.mapN-light .mapN-bottom .item.muted{color:#bbb1aa!important}
 #mapN-container.mapN-light .mapN-pos{color:#747579!important}
 #mapN-container.mapN-light .mapN-current-link{color:#b95768!important}
-#mapN-container.mapN-light .mapN-characters{color:#77787c!important;border-top-color:#eae1da!important}
-#mapN-container.mapN-light .mapN-characters .label{color:#77787c!important}
-#mapN-container.mapN-light .mapN-characters .name{color:#a86f34!important}
 #mapN-container.mapN-light #mapN-data-panel{background:#fffaf6!important;border-color:#dfd6ce!important;color:#45464a!important;box-shadow:0 6px 24px rgba(82,60,45,.16)!important}
 #mapN-container.mapN-light #mapN-data-panel button{background:#f6efea!important;border-color:#dfd6ce!important;color:#4c4e52!important}
 #mapN-container.mapN-light #mapN-data-panel button:hover,#mapN-container.mapN-light #mapN-data-panel button:active{background:#efe5df!important;border-color:#c97a87!important}

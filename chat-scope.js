@@ -1,4 +1,4 @@
-// Map-N chat scope refresher v1.2.0
+// Map-N chat scope refresher v1.2.1
 // Keep every chat file isolated: refresh SillyTavern context, switch storage scope, invalidate graph/runtime caches,
 // then reload only the new chat's persisted main state. Worldbook is rebuilt by the pending prime() call.
 const scopeWait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -14,7 +14,7 @@ function currentChatIdentity(ctx){
 }
 async function install(){
   for(let i=0;i<160&&!window.MapNInstance;i++)await scopeWait(50);
-  const inst=window.MapNInstance;if(!inst||inst.__chatScope110)return;inst.__chatScope110=true;
+  const inst=window.MapNInstance;if(!inst||inst.__chatScope121)return;inst.__chatScope121=true;
   const base='mapN_memory_v120';
   inst.scopeKey=function(){const ctx=freshContext()||this.ctx;return `${base}:${currentChatIdentity(ctx)}`;};
   const refresh=()=>{const ctx=freshContext();if(ctx)inst.ctx=ctx;inst.memoryKey=inst.scopeKey();};
@@ -43,6 +43,6 @@ async function install(){
     if(et.CHAT_CHANGED)es.on(et.CHAT_CHANGED,onChange);
     if(et.CHARACTER_SELECTED)es.on(et.CHARACTER_SELECTED,onChange);
   }
-  console.log('[Map-N] chat scope refresher v1.2.0 installed',inst.memoryKey);
+  console.log('[Map-N] chat scope refresher v1.2.1 installed',inst.memoryKey);
 }
 install();
