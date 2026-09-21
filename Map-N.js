@@ -1,7 +1,7 @@
-// Map-N.js - 认知层级舆图 v1.6.2
+// Map-N.js - 认知层级舆图 v1.6.3
 (function () {
 'use strict';
-const VERSION='1.6.2',ROOT='世界舆图',BASE='mapN_memory_v120';
+const VERSION='1.6.3',ROOT='世界舆图',BASE='mapN_memory_v120';
 if(window.MapNInstance)return;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const uniq=a=>[...new Set((a||[]).filter(Boolean))];
