@@ -6,8 +6,8 @@
   "js": "index.js",
   "css": "Map-N.css",
   "author": "Map-N",
-  "version": "1.6.1",
-  "description": "认知舆图：全历史场景头回溯、稳定地理实体归属、世界书占位节点升级、多场景定位，并通过正式扩展提示词向正文生成注入精简地理记忆",
+  "version": "1.6.2",
+  "description": "认知舆图：全历史场景回溯、整条地理归属保护、明确纠错迁移、同名地点分支、多场景定位，并通过正式扩展提示词向正文生成注入精简地理记忆",
   "homePage": "https://github.com/steep-47/Map-N",
   "auto_update": true
 }

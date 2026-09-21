@@ -1,4 +1,4 @@
-// Map-N prompt context v1.1.0
+// Map-N prompt context v1.2.0
 // Register compact geographic memory through SillyTavern's extension-prompt pipeline so it is token-budgeted.
 // The prompt only exists during a normal story generation and is cleared afterwards, keeping Memo-N record-only calls clean.
 const ROOT='世界舆图',KEY='map-n-geography',POSITION_IN_PROMPT=0,POSITION_NONE=-1,ROLE_SYSTEM=0,wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -30,13 +30,20 @@ function setPrompt(inst,value){const ctx=window.SillyTavern?.getContext?.()||ins
 function refresh(inst){const value=buildContext(inst);setPrompt(inst,value);return value;}
 function clear(inst){setPrompt(inst,'');}
 async function install(){
- for(let n=0;n<180&&!window.MapNInstance;n++)await wait(50);const inst=window.MapNInstance;if(!inst||inst.__promptContext110)return;inst.__promptContext110=true;
+ for(let n=0;n<180&&!window.MapNInstance;n++)await wait(50);const inst=window.MapNInstance;if(!inst||inst.__promptContext120)return;inst.__promptContext120=true;
  const es=inst.ctx?.eventSource,et=inst.ctx?.eventTypes||inst.ctx?.event_types;if(!es||!et?.GENERATION_STARTED){console.warn('[Map-N] 无法安装地理记忆注入：缺少生成事件');return;}
  clear(inst);
- es.on(et.GENERATION_STARTED,(type,_params,isDryRun)=>{if(isDryRun||type==='quiet'||type==='impersonate'){clear(inst);return;}try{refresh(inst)}catch(e){console.warn('[Map-N] 地理记忆准备失败',e);clear(inst);}});
+ const safeRefresh=()=>{try{refresh(inst)}catch(e){console.warn('[Map-N] 地理记忆准备失败',e);clear(inst);}};
+ es.on(et.GENERATION_STARTED,(type,params,isDryRun)=>{
+  if(isDryRun||type==='quiet'||type==='impersonate'){clear(inst);return;}
+  const waitsForUser=[undefined,null,'normal'].includes(type)&&!params?.automatic_trigger;
+  if(waitsForUser){clear(inst);return;}
+  safeRefresh();
+ });
+ if(et.MESSAGE_SENT)es.on(et.MESSAGE_SENT,()=>safeRefresh());
  const cleanup=()=>clear(inst);if(et.GENERATION_ENDED)es.on(et.GENERATION_ENDED,cleanup);if(et.GENERATION_STOPPED)es.on(et.GENERATION_STOPPED,cleanup);if(et.CHAT_CHANGED)es.on(et.CHAT_CHANGED,cleanup);if(et.CHARACTER_SELECTED)es.on(et.CHARACTER_SELECTED,cleanup);
  globalThis.MapNPromptContext={build:()=>buildContext(inst),refresh:()=>refresh(inst),clear:()=>clear(inst)};
- console.log('[Map-N] prompt context v1.1.0 installed');
+ console.log('[Map-N] prompt context v1.2.0 installed');
 }
 install();
 export {buildContext};

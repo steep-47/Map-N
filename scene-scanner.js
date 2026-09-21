@@ -1,4 +1,4 @@
-// Map-N scene scanner v2.4.0
+// Map-N scene scanner v2.5.0
 // Responsibility: learn canonical location chains from structured scene headers. No person parsing here.
 // Scene-header locations keep message provenance so recent swipe/update/delete can roll back only affected learned nodes.
 const wait=ms=>new Promise(r=>setTimeout(r,ms)),ROOT='世界舆图',MEMORY_VERSION=9;
@@ -63,29 +63,49 @@ function mergeRecord(i,r){
  if(sceneOwned){if(r.parent===ROOT){i.root.children||=[];if(!i.root.children.includes(r.id))i.root.children.push(r.id);}else if(i.nodeMap[r.parent]){i.nodeMap[r.parent].children||=[];if(!i.nodeMap[r.parent].children.includes(r.id))i.nodeMap[r.parent].children.push(r.id);}}
 }
 function mergeAll(i,core){migrate(i,core);for(const r of Object.values(i.__mapNSceneStore?.learnedLocations||{}))mergeRecord(i,r);}
+const STABLE_GEO_RE=/(?:大陆|陆|洲|州|郡|府|县|国|皇朝|王朝|帝国|王国|域|界)$/u;
+const CORRECTION_RE=/(?:纠正|更正|修正|改正|写错|说错|记错|弄错|地图.{0,8}(?:错|错误)|地理.{0,8}(?:错|错误)|归属.{0,8}(?:错|错误)|前面.{0,8}(?:错|错误)|刚才.{0,8}(?:错|错误)|(?:归属|属于|隶属|位于|所在地|上级|下辖)[^。！？!?]{0,28}(?:应为|应该是|实际(?:上)?是|并非|不是))/u;
 function recordConflict(i,incoming,kept,src,text,segment=''){
  const s=i.__mapNSceneStore||=load(i),item={incoming,kept,segment,source:src||null,evidence:evidenceText(text),at:Date.now()};
  const last=s.conflicts?.at?.(-1);if(!last||last.incoming!==incoming||last.kept!==kept||last.segment!==segment)s.conflicts=[...(s.conflicts||[]),item].slice(-32);
  save(i);
 }
-function stableParts(i,core,clean,src,text){
- if(!clean.length)return clean;const s=i.__mapNSceneStore||=load(i),incoming=clean.join('／'),records=Object.values(s.learnedLocations||{});
+function correctionIntent(i,sourceIndex,label,oldParts,newParts){
+ if(!Number.isInteger(sourceIndex)||sourceIndex<=0)return false;const prev=i.ctx?.chat?.[sourceIndex-1];if(!prev?.is_user)return false;
+ const text=String(prev.mes||'').replace(/\s+/gu,' ').trim();if(!CORRECTION_RE.test(text))return false;
+ const refs=uniq([label,...oldParts,...newParts]).filter(x=>x&&x.length>=2);return refs.some(x=>text.includes(x))||/(?:地图|地理|地点|位置|归属|国家|王朝|皇朝|州|郡|府|县|边境)/u.test(text);
+}
+function mergeStoreRecord(a,b){
+ if(!a)return b;if(!b)return a;return{...a,...b,aliases:uniq([...(a.aliases||[]),...(b.aliases||[])]),sources:uniq([...(a.sources||[]),...(b.sources||[])]),evidence:evidenceList(a.evidence,b.evidence)};
+}
+function rehomePrefix(i,oldPrefix,newPrefix){
+ if(!oldPrefix||!newPrefix||oldPrefix===newPrefix)return;const s=i.__mapNSceneStore||=load(i),rows=Object.entries(s.learnedLocations||{}).filter(([id])=>id===oldPrefix||id.startsWith(oldPrefix+'／')).sort((a,b)=>a[0].length-b[0].length);
+ if(!rows.length)return;const moved=[];
+ for(const [oldId,rec] of rows){const suffix=oldId.slice(oldPrefix.length),newId=newPrefix+suffix,parts=newId.split('／').filter(Boolean),parent=parts.length>1?parts.slice(0,-1).join('／'):ROOT,next={...rec,id:newId,parent,label:parts.at(-1)};s.learnedLocations[newId]=mergeStoreRecord(s.learnedLocations[newId],next);delete s.learnedLocations[oldId];moved.push({oldId,newId});}
+ for(const {oldId} of moved)detachNode(i,oldId);for(const {newId} of moved)mergeRecord(i,s.learnedLocations[newId]);
+ if(i.currentPos&&(i.currentPos===oldPrefix||i.currentPos.startsWith(oldPrefix+'／')))i.currentPos=newPrefix+i.currentPos.slice(oldPrefix.length);
+ if(Array.isArray(i.path))i.path=i.currentPos?i.pathTo(i.currentPos):[ROOT];i.__mapNHierarchyGraphSig=null;save(i);
+}
+function stableParts(i,core,clean,src,text,sourceIndex){
+ if(!clean.length)return{parts:clean,conflicted:false,corrected:false};const s=i.__mapNSceneStore||=load(i),incoming=clean.join('／'),records=Object.values(s.learnedLocations||{});
  for(let n=0;n<clean.length;n++){
-  const label=core.normalizeLocationSegment(clean[n]),matches=records.filter(r=>core.normalizeLocationSegment(r?.label)===label);if(matches.length!==1)continue;
+  const label=core.normalizeLocationSegment(clean[n]);if(!STABLE_GEO_RE.test(label))continue;
+  const matches=records.filter(r=>core.normalizeLocationSegment(r?.label)===label);if(matches.length!==1)continue;
   const rec=matches[0],old=String(rec.id||'').split('／').filter(Boolean),prefix=clean.slice(0,n+1).join('／');if(!old.length||rec.id===prefix)continue;
-  const lock=n<clean.length-1||/(?:大陆|陆|洲|州|郡|府|县|国|皇朝|王朝|帝国|王国|域|界)$/u.test(label);if(!lock)continue;
-  recordConflict(i,incoming,rec.id,src,text,label);return[...old,...clean.slice(n+1)];
+  if(correctionIntent(i,sourceIndex,label,old,clean)){rehomePrefix(i,rec.id,prefix);return{parts:clean,conflicted:false,corrected:true};}
+  recordConflict(i,incoming,rec.id,src,text,label);return{parts:null,conflicted:true,corrected:false};
  }
- return clean;
+ return{parts:clean,conflicted:false,corrected:false};
 }
 function learn(i,core,parts,setCurrent=true,sourceIndex=null,sourceText=''){
  const raw=core.expandLocationParts?core.expandLocationParts(parts):(parts||[]).map(core.normalizeLocationSegment).filter(Boolean);if(!raw.length)return null;
- const idx=Number.isInteger(sourceIndex)?sourceIndex:inferSourceIndex(i,sourceText),src=sourceKey(idx,sourceText),clean=stableParts(i,core,raw,src,sourceText);
+ const idx=Number.isInteger(sourceIndex)?sourceIndex:inferSourceIndex(i,sourceText),src=sourceKey(idx,sourceText),resolved=stableParts(i,core,raw,src,sourceText,idx);
+ if(resolved.conflicted||!resolved.parts?.length){i.save?.();return i.currentPos||null;}const clean=resolved.parts;
  const{leaf,touched}=ensure(i,core,clean,src,sourceText);const s=i.__mapNSceneStore;for(const id of touched)mergeRecord(i,s?.learnedLocations?.[id]);
  if(setCurrent){i.currentPos=leaf;i.path=i.pathTo(leaf);}i.save?.();return leaf;
 }
-function detachNode(i,id){const n=i.nodeMap?.[id];if(!n||n.source!=='scene-header'||n.learned!==true)return;delete i.nodeMap[id];for(const [a,target] of [...(i.alias?.entries?.()||[])])if(target===id)i.alias.delete(a);i.discovered?.delete?.(id);if(i.currentPos===id)i.currentPos=null;if(Array.isArray(i.path)&&i.path.includes(id))i.path=[ROOT];}
+function detachNode(i,id){const n=i.nodeMap?.[id];if(!n||n.source!=='scene-header'||n.learned!==true)return;if(n.parent===ROOT)removeChild(i.root?.children,id);else removeChild(i.nodeMap?.[n.parent]?.children,id);delete i.nodeMap[id];for(const [a,target] of [...(i.alias?.entries?.()||[])])if(target===id)i.alias.delete(a);i.discovered?.delete?.(id);if(i.currentPos===id)i.currentPos=null;if(Array.isArray(i.path)&&i.path.includes(id))i.path=[ROOT];}
 function reconcileRecent(i,start,end,chat){const s=i.__mapNSceneStore||=load(i);const valid=new Set();for(let n=start;n<end;n++){const m=chat?.[n];if(m?.mes&&!m.is_user)valid.add(sourceKey(n,String(m.mes)));}let changed=false;for(const [id,rec] of Object.entries(s.learnedLocations||{})){const sources=uniq(rec?.sources||[]);if(!sources.length)continue;const kept=sources.filter(k=>{const idx=Number(String(k).split(':',1)[0]);return !Number.isInteger(idx)||idx<start||valid.has(k)});if(kept.length!==sources.length){rec.sources=kept;rec.evidence=(rec.evidence||[]).filter(e=>kept.includes(e.source));changed=true;}if(!kept.length){delete s.learnedLocations[id];detachNode(i,id);changed=true;}}if(changed){i.__mapNHierarchyGraphSig=null;save(i);}return changed;}
 function scanHeaders(i,core,chat,start=0,end=(chat||[]).length){let count=0,last=null;for(let n=Math.max(0,start);n<Math.min(end,(chat||[]).length);n++){const m=chat?.[n];if(!m?.mes||m.is_user)continue;const text=String(m.mes),paths=core.parseHeaderLocations?.(text)||[];for(const p of paths){last=learn(i,core,p,true,n,text);count++;}}return{count,last};}
-async function install(){for(let n=0;n<160&&(!window.MapNInstance||!globalThis.MapNEntityCore);n++)await wait(50);const i=window.MapNInstance,core=globalThis.MapNEntityCore;if(!i||!core||i.__sceneScanner240)return;i.__sceneScanner240=true;i.__mapNSceneStore=load(i);migrate(i,core);const priorFlush=i.__mapNFlushBatch?.bind(i);i.__mapNFlushBatch=function(){priorFlush?.();if(this.__mapNSceneSaveDirty){this.__mapNSceneSaveDirty=false;write(this);}};const oldBuild=i.build.bind(i);i.build=function(entries){oldBuild(entries);this.__mapNAmbiguousAliases=new Set();mergeAll(this,core);};const oldProcess=i.process.bind(i);i.process=function(text,isUser=false){oldProcess(text,isUser);if(!isUser&&text){const paths=core.parseHeaderLocations?.(text)||[];for(const parts of paths)learn(this,core,parts,true,null,String(text));}if(this.container?.classList.contains('open'))this.render?.();};mergeAll(i,core);const chat=i.ctx?.chat||[],r=recentRange(chat);scanHeaders(i,core,chat,r.start,r.end);globalThis.MapNSceneScanner={reconcileRecent:(inst,start,end,all)=>reconcileRecent(inst,start,end,all),scanAll:(inst,all)=>scanHeaders(inst,core,all,0,(all||[]).length)};const es=i.ctx?.eventSource,et=i.ctx?.eventTypes||i.ctx?.event_types;if(es&&et){const onMutation=()=>setTimeout(()=>{const fresh=window.SillyTavern?.getContext?.();if(fresh)i.ctx=fresh;const all=i.ctx?.chat||[],rr=recentRange(all);if(reconcileRecent(i,rr.start,rr.end,all))i.render?.();},80);['MESSAGE_SWIPED','MESSAGE_UPDATED','MESSAGE_DELETED'].forEach(k=>{if(et[k])es.on(et[k],onMutation)});}i.render?.();console.log('[Map-N] scene scanner v2.4.0 installed');}
+async function install(){for(let n=0;n<160&&(!window.MapNInstance||!globalThis.MapNEntityCore);n++)await wait(50);const i=window.MapNInstance,core=globalThis.MapNEntityCore;if(!i||!core||i.__sceneScanner250)return;i.__sceneScanner250=true;i.__mapNSceneStore=load(i);migrate(i,core);const priorFlush=i.__mapNFlushBatch?.bind(i);i.__mapNFlushBatch=function(){priorFlush?.();if(this.__mapNSceneSaveDirty){this.__mapNSceneSaveDirty=false;write(this);}};const oldBuild=i.build.bind(i);i.build=function(entries){oldBuild(entries);this.__mapNAmbiguousAliases=new Set();mergeAll(this,core);};const oldProcess=i.process.bind(i);i.process=function(text,isUser=false){oldProcess(text,isUser);if(!isUser&&text){const paths=core.parseHeaderLocations?.(text)||[];for(const parts of paths)learn(this,core,parts,true,null,String(text));}if(this.container?.classList.contains('open'))this.render?.();};mergeAll(i,core);const chat=i.ctx?.chat||[],r=recentRange(chat);scanHeaders(i,core,chat,r.start,r.end);globalThis.MapNSceneScanner={reconcileRecent:(inst,start,end,all)=>reconcileRecent(inst,start,end,all),scanAll:(inst,all)=>scanHeaders(inst,core,all,0,(all||[]).length)};const es=i.ctx?.eventSource,et=i.ctx?.eventTypes||i.ctx?.event_types;if(es&&et){const onMutation=()=>setTimeout(()=>{const fresh=window.SillyTavern?.getContext?.();if(fresh)i.ctx=fresh;const all=i.ctx?.chat||[],rr=recentRange(all);if(reconcileRecent(i,rr.start,rr.end,all))i.render?.();},80);['MESSAGE_SWIPED','MESSAGE_UPDATED','MESSAGE_DELETED'].forEach(k=>{if(et[k])es.on(et[k],onMutation)});}i.render?.();console.log('[Map-N] scene scanner v2.5.0 installed');}
 install();
